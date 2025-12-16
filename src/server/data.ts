@@ -37,6 +37,22 @@ function mapIssue(row: any): Issue {
     address: row.location_address
   };
 
+  // Fetch blockchain transaction
+  const txFn = db.prepare('SELECT * FROM blockchain_transactions WHERE issue_id = ?');
+  const txRow = txFn.get(row.id) as any;
+
+  let blockchainTransaction: BlockchainTransaction | undefined;
+  if (txRow) {
+    blockchainTransaction = {
+      txHash: txRow.tx_hash,
+      blockNumber: 0, // Not stored in simplifed DB
+      timestamp: new Date(txRow.timestamp),
+      adminId: txRow.admin_id,
+      status: txRow.status as IssueStatus,
+      explorerUrl: txRow.explorer_url || `https://sepolia.etherscan.io/tx/${txRow.tx_hash}` // Default valid URL or from DB
+    };
+  }
+
   return {
     id: row.id,
     title: row.title,
@@ -53,7 +69,7 @@ function mapIssue(row: any): Issue {
     isUrgent: Boolean(row.is_urgent),
     licensePlate: row.license_plate,
     violationType: row.violation_type,
-    // blockchainTransaction: TODO store this in DB if we want persistence of that too
+    blockchainTransaction,
   };
 }
 
@@ -166,13 +182,34 @@ export async function addIssue(
   return (await getIssueById(newId))!;
 }
 
+export async function addBlockchainTransaction(
+  issueId: string,
+  txHash: string,
+  adminId: string,
+  status: IssueStatus
+) {
+  const stmt = db.prepare(`
+        INSERT INTO blockchain_transactions (issue_id, tx_hash, admin_id, status, timestamp, explorer_url)
+        VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
+  // Default explorer URL assuming Sepolia or similar, can be customized or passed in
+  const explorerUrl = `https://sepolia.etherscan.io/tx/${txHash}`;
+
+  stmt.run(issueId, txHash, adminId, status, Date.now(), explorerUrl);
+}
+
 export async function updateIssueStatus(
   issueId: string,
   newStatus: IssueStatus,
-  notes?: string
+  notes?: string,
+  txHash?: string,
+  adminId?: string
 ): Promise<Issue | undefined> {
   const issue = await getIssueById(issueId);
   if (!issue) return undefined;
+
+  const actualAdminId = adminId || 'admin-1';
 
   const stmt = db.prepare('UPDATE issues SET status = ? WHERE id = ?');
   stmt.run(newStatus, issueId);
@@ -181,11 +218,11 @@ export async function updateIssueStatus(
         INSERT INTO issue_updates (issue_id, status, timestamp, updated_by, notes)
         VALUES (?, ?, ?, ?, ?)
     `);
-  updateStmt.run(issueId, newStatus, Date.now(), 'admin-1', notes || null);
+  updateStmt.run(issueId, newStatus, Date.now(), actualAdminId, notes || null);
 
-  // We are NOT doing the blockchain simulation inside the DB layer anymore. 
-  // The previous code had a mock side effect. 
-  // Real blockchain txs happen in the client or a specialized server action.
+  if (txHash) {
+    await addBlockchainTransaction(issueId, txHash, actualAdminId, newStatus);
+  }
 
   return await getIssueById(issueId);
 }

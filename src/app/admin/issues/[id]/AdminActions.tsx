@@ -26,7 +26,50 @@ export function AdminActions({ issueId, currentStatus }: AdminActionsProps) {
 
     const handleUpdateStatus = (newStatus: IssueStatus, notes?: string) => {
         startTransition(async () => {
-            const result = await updateIssueStatusAction(issueId, newStatus, notes);
+            let txHash: string | undefined;
+
+            // blockchain verification for critical actions
+            if (newStatus !== 'Seen') {
+                try {
+                    const { isWalletConnected, connectWallet, verifyIssueOnChain } = await import('@/lib/web3');
+                    let wallet = await isWalletConnected();
+                    if (!wallet) {
+                        wallet = await connectWallet();
+                    }
+
+                    if (!wallet) {
+                        toast({
+                            title: "Wallet Required",
+                            description: "Please connect your MetaMask wallet to perform this action.",
+                            variant: "destructive",
+                        });
+                        return;
+                    }
+
+                    toast({
+                        title: "Verifying on Blockchain",
+                        description: "Please confirm the transaction in MetaMask...",
+                    });
+
+                    txHash = await verifyIssueOnChain(issueId, wallet, newStatus);
+
+                    toast({
+                        title: "Transaction Sent",
+                        description: "Waiting for confirmation...",
+                    });
+                } catch (error) {
+                    console.error("Blockchain verification failed:", error);
+                    toast({
+                        title: "Blockchain Error",
+                        description: "Failed to verify on chain. Action cancelled.",
+                        variant: "destructive",
+                    });
+                    return;
+                }
+            }
+
+            const result = await updateIssueStatusAction(issueId, newStatus, notes, txHash);
+
             if (result.success) {
                 toast({
                     title: "Status Updated",

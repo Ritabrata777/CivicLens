@@ -102,14 +102,18 @@ export default async function AdminIssueDetailPage({ params }: { params: { id: s
               </CardTitle>
             </CardHeader>
             <CardContent className="text-sm space-y-2">
-              <p className="text-muted-foreground">
-                This issue's acceptance is recorded on-chain.
-              </p>
-              <Button asChild variant="link" className="p-0 h-auto">
-                <a href={issue.blockchainTransaction.explorerUrl} target="_blank" rel="noopener noreferrer">
-                  View Transaction <ExternalLink className="w-3 h-3 ml-1" />
+              <div className="flex flex-col gap-1">
+                <span className="font-medium">Issue {issue.blockchainTransaction.status}</span>
+                <a
+                  href={issue.blockchainTransaction.explorerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-muted-foreground hover:text-primary transition-colors break-all hover:underline"
+                >
+                  {issue.blockchainTransaction.txHash}
+                  <ExternalLink className="w-3 h-3 inline ml-1" />
                 </a>
-              </Button>
+              </div>
             </CardContent>
           </Card>
         )}

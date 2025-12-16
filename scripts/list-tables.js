@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 
-const dbPath = path.join(process.cwd(), 'data.db');
+const dbPath = path.join(process.cwd(), 'civic-lens.db');
 console.log('Opening DB at:', dbPath);
 const db = new Database(dbPath, { verbose: console.log });
 

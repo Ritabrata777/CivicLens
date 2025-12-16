@@ -119,7 +119,7 @@ export default async function IssueDetailPage({ params }: { params: { id: string
         </Card>
 
         {/* Real Blockchain Verification Component */}
-        <BlockchainVerificationCard issueId={issue.id} />
+        <BlockchainVerificationCard transaction={issue.blockchainTransaction} />
 
 
         <Card>

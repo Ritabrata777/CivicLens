@@ -166,7 +166,7 @@ export async function createIssueAction(prevState: FormState, formData: FormData
   }
 }
 
-export async function updateIssueStatusAction(issueId: string, newStatus: IssueStatus, notes?: string) {
+export async function updateIssueStatusAction(issueId: string, newStatus: IssueStatus, notes?: string, txHash?: string) {
   try {
     const cookieStore = await cookies();
     const sessionToken = cookieStore.get('session_token');
@@ -176,20 +176,7 @@ export async function updateIssueStatusAction(issueId: string, newStatus: IssueS
     }
 
     const user = await getUserById(sessionToken.value);
-    if (!user || (user as any).role !== 'admin') { // Type assertion needed if User type doesn't explicitly have role yet, checking data.ts it seems mapUser doesn't return role?
-      // Wait, I need to check if mapUser returns role. In step 19, mapUser (line 6) does NOT return role. 
-      // But the DB insert in auth-actions.ts (line 65) inserts 'role'. 
-      // I should probably update mapUser or just query the DB directly here? 
-      // Better to rely on getUserById returning the full object or update mapUser.
-      // Let's modify mapUser in data.ts first? OR just do a quick DB lookup here?
-      // Re-reading data.ts: user object returned by getUserById does NOT have role.
-      // So I should probably update `getUserById` or `mapUser` in data.ts to include role first.
-      // However, for this specific tool call, I will assume I can fix data.ts in the next step or right now.
-      // Actually, let's look at `data.ts` again.
-      // `mapUser` returns `User` type. `User` type is imported from `@/lib/types`.
-      // I should check `@/lib/types` to see if `role` is there.
-      // If not, I'll need to update it.
-      // For now, I will proceed with adding the check assuming I will fix the type/data fetching in a moment.
+    if (!user || user.role !== 'admin') {
       return { success: false, message: 'Unauthorized: Admin access required.' };
     }
 
@@ -197,15 +184,16 @@ export async function updateIssueStatusAction(issueId: string, newStatus: IssueS
       if (!notes || notes.trim().length === 0) {
         return { success: false, message: 'A reason is required to reject an issue.' };
       }
-      await deleteIssue(issueId);
+      // CHANGED: Do not delete issue on rejection. Keep it for records.
+      await updateIssueStatus(issueId, newStatus, notes, txHash, user.id);
       revalidatePath('/admin/dashboard');
       revalidatePath('/');
       revalidatePath('/issues');
       revalidatePath('/profile');
-      return { success: true, message: 'Issue rejected and permanently deleted.' };
+      return { success: true, message: 'Issue rejected and recorded on-chain.' };
     }
 
-    await updateIssueStatus(issueId, newStatus, notes);
+    await updateIssueStatus(issueId, newStatus, notes, txHash, user.id);
     revalidatePath(`/issues/${issueId}`);
     revalidatePath(`/admin/issues/${issueId}`);
     revalidatePath('/admin/dashboard');
@@ -213,6 +201,7 @@ export async function updateIssueStatusAction(issueId: string, newStatus: IssueS
     revalidatePath('/profile');
     return { success: true, message: `Status updated to ${newStatus}` };
   } catch (error) {
+    console.error("Update Status Error", error);
     return { success: false, message: 'Failed to update status.' };
   }
 }
