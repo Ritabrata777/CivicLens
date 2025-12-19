@@ -5,7 +5,7 @@ import { useFormStatus } from "react-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -31,6 +31,8 @@ function SubmitButton() {
 
 export function LoginForm() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const nextPath = searchParams.get("next") || "/profile";
     const { toast } = useToast();
 
     // Initial state for the server action
@@ -53,7 +55,7 @@ export function LoginForm() {
                     title: "Welcome back!",
                     description: state.message,
                 });
-                router.push('/profile');
+                router.push(nextPath);
             } else {
                 toast({
                     title: "Login Failed",
