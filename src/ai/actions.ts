@@ -8,6 +8,9 @@ import util from 'util';
 import os from 'os';
 
 const execAsync = util.promisify(exec);
+// Default exec options: 30s timeout, larger stdout/stderr buffer to accommodate verbose Python libraries
+const EXEC_TIMEOUT_MS = 30_000;
+const DEFAULT_EXEC_OPTIONS = { timeout: EXEC_TIMEOUT_MS, maxBuffer: 20 * 1024 * 1024 };
 
 export async function verifyVoterIdAction(input: VerifyVoterIdInput) {
     const { voterIdNumber, photoDataUri, photoBackDataUri } = input;
@@ -36,7 +39,18 @@ export async function verifyVoterIdAction(input: VerifyVoterIdInput) {
         const command = `${pythonStr} "${pythonScript}" "${imagePathFront}" ${backPathArg} "${voterIdNumber}"`;
         console.log(`Executing: ${command}`);
 
-        const { stdout, stderr } = await execAsync(command);
+        let stdout: string, stderr: string;
+        try {
+            const res = await execAsync(command, DEFAULT_EXEC_OPTIONS);
+            stdout = res.stdout;
+            stderr = res.stderr;
+        } catch (e: any) {
+            // Detect timeout or kill and provide clearer message
+            if (e.killed || e.signal === 'SIGTERM' || e.code === 'ETIMEDOUT') {
+                throw new Error(`Python verification timed out after ${EXEC_TIMEOUT_MS}ms`);
+            }
+            throw e;
+        }
 
         if (stderr) {
             console.warn("Python stderr:", stderr);
@@ -88,5 +102,54 @@ export async function verifyVoterIdAction(input: VerifyVoterIdInput) {
             isValid: false,
             reason: error.message || "An unexpected error occurred during verification."
         }
+    }
+}
+
+export async function detectDuplicatesAction(issueId: string) {
+    try {
+        const pythonScript = path.join(process.cwd(), 'ml', 'scripts', 'detect_duplicates.py');
+        const venvPython = path.join(process.cwd(), 'python', 'venv', 'Scripts', 'python.exe');
+        // Fallback to system python if venv not found. Ensure we quote paths with spaces.
+        const pythonStr = fs.existsSync(venvPython) ? `"${venvPython}"` : "python";
+
+        const projectRoot = process.cwd();
+        // Quote project root too just in case
+        const command = `${pythonStr} "${pythonScript}" "${issueId}" "${projectRoot}"`;
+
+        let stdout: string, stderr: string;
+        try {
+            const res = await execAsync(command, DEFAULT_EXEC_OPTIONS);
+            stdout = res.stdout;
+            stderr = res.stderr;
+        } catch (e: any) {
+            if (e.killed || e.signal === 'SIGTERM' || e.code === 'ETIMEDOUT') {
+                console.error(`Duplicate detection timed out after ${EXEC_TIMEOUT_MS}ms`);
+                return { matches: [], error: `Duplicate detection timed out after ${EXEC_TIMEOUT_MS}ms` };
+            }
+            throw e;
+        }
+
+        if (stderr) {
+            // print stderr but don't fail immediately as some libs print warnings to stderr
+            console.warn("Duplicate Detection Stderr:", stderr);
+        }
+
+        const lines = stdout.trim().split('\n');
+        let result = null;
+        for (let i = lines.length - 1; i >= 0; i--) {
+            try {
+                result = JSON.parse(lines[i]);
+                if (result.matches !== undefined || result.error) break;
+            } catch (e) { continue; }
+        }
+
+        if (!result) throw new Error("Could not parse duplicate detection output.");
+        if (result.error) throw new Error(result.error);
+
+        return { matches: result.matches || [] };
+
+    } catch (error: any) {
+        console.error("Error in duplicate detection:", error);
+        return { matches: [], error: error.message };
     }
 }
