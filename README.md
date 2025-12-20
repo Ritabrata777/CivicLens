@@ -83,15 +83,10 @@ npm run db:seed
 ### 4. Run the App
 ```bash
 npm run dev
-```
-Visit `http://localhost:3000`.
+
 
 ---
 
 
-## 🔮 Roadmap
-- [ ] **WhatsApp Bot**: Report issues simply by sending a photo to a number.
-- [ ] **Constituency Map**: Heatmap of "most ignored" vs "best maintained" zones.
-- [ ] **Token Rewards**: Earn "Civic Tokens" for verifying fixes, redeemable for public transit.
 
 
