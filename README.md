@@ -3,8 +3,6 @@
 
 > **"Trust, but Verify."** — Rebuilding the bridge between citizens and government through AI and Blockchain.
 
-![Civic Lens Banner](public/images/logo.png)
-
 ## 🚀 Overview
 **Civic Lens** is a next-generation civic grievance redressal platform. Unlike traditional systems (like CPGRAMS) which are opaque and reactive, Civic Lens is **Transparent**, **Proactive**, and **Accountable**.
 
@@ -95,4 +93,5 @@ Visit `http://localhost:3000`.
 - [ ] **WhatsApp Bot**: Report issues simply by sending a photo to a number.
 - [ ] **Constituency Map**: Heatmap of "most ignored" vs "best maintained" zones.
 - [ ] **Token Rewards**: Earn "Civic Tokens" for verifying fixes, redeemable for public transit.
+
 
