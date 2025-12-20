@@ -20,6 +20,15 @@ export type BlockchainTransaction = {
   explorerUrl: string;
 };
 
+export type ResolutionEvidence = {
+  id: number;
+  issueId: string;
+  adminId: string;
+  imageUrl: string;
+  notes?: string;
+  timestamp: Date;
+};
+
 export type Issue = {
   id: string;
   title: string;
@@ -41,6 +50,7 @@ export type Issue = {
   isUrgent?: boolean;
   licensePlate?: string;
   violationType?: string;
+  resolutionEvidence?: ResolutionEvidence;
 };
 
 export type User = {

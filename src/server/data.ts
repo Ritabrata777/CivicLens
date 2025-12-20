@@ -1,4 +1,4 @@
-import type { Issue, User, IssueStatus, IssueUpdate, BlockchainTransaction, IssueCategory } from '@/lib/types';
+import type { Issue, User, IssueStatus, IssueUpdate, BlockchainTransaction, IssueCategory, ResolutionEvidence } from '@/lib/types';
 import db from '@/db';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 
@@ -38,7 +38,7 @@ function mapIssue(row: any): Issue {
   };
 
   // Fetch blockchain transaction
-  const txFn = db.prepare('SELECT * FROM blockchain_transactions WHERE issue_id = ?');
+  const txFn = db.prepare('SELECT * FROM blockchain_transactions WHERE issue_id = ? ORDER BY timestamp DESC LIMIT 1');
   const txRow = txFn.get(row.id) as any;
 
   let blockchainTransaction: BlockchainTransaction | undefined;
@@ -49,7 +49,24 @@ function mapIssue(row: any): Issue {
       timestamp: new Date(txRow.timestamp),
       adminId: txRow.admin_id,
       status: txRow.status as IssueStatus,
-      explorerUrl: txRow.explorer_url || `https://sepolia.etherscan.io/tx/${txRow.tx_hash}` // Default valid URL or from DB
+      // Force OKLink Amoy for all transactions to satisfy user request, ignoring potentially stale DB data
+      explorerUrl: `https://www.oklink.com/amoy/tx/${txRow.tx_hash}`
+    };
+  }
+
+  // Fetch resolution evidence
+  const resEvFn = db.prepare('SELECT * FROM resolution_evidence WHERE issue_id = ?');
+  const resEvRow = resEvFn.get(row.id) as any;
+
+  let resolutionEvidence: ResolutionEvidence | undefined;
+  if (resEvRow) {
+    resolutionEvidence = {
+      id: resEvRow.id,
+      issueId: resEvRow.issue_id,
+      adminId: resEvRow.admin_id,
+      imageUrl: resEvRow.image_url,
+      notes: resEvRow.notes,
+      timestamp: new Date(resEvRow.timestamp)
     };
   }
 
@@ -70,6 +87,7 @@ function mapIssue(row: any): Issue {
     licensePlate: row.license_plate,
     violationType: row.violation_type,
     blockchainTransaction,
+    resolutionEvidence
   };
 }
 
@@ -193,8 +211,8 @@ export async function addBlockchainTransaction(
         VALUES (?, ?, ?, ?, ?, ?)
     `);
 
-  // Default explorer URL assuming Sepolia or similar, can be customized or passed in
-  const explorerUrl = `https://sepolia.etherscan.io/tx/${txHash}`;
+  // Default explorer URL assuming Amoy, can be customized or passed in
+  const explorerUrl = `https://www.oklink.com/amoy/tx/${txHash}`;
 
   stmt.run(issueId, txHash, adminId, status, Date.now(), explorerUrl);
 }
@@ -204,7 +222,8 @@ export async function updateIssueStatus(
   newStatus: IssueStatus,
   notes?: string,
   txHash?: string,
-  adminId?: string
+  adminId?: string,
+  resolutionImageUrl?: string
 ): Promise<Issue | undefined> {
   const issue = await getIssueById(issueId);
   if (!issue) return undefined;
@@ -222,6 +241,10 @@ export async function updateIssueStatus(
 
   if (txHash) {
     await addBlockchainTransaction(issueId, txHash, actualAdminId, newStatus);
+  }
+
+  if (resolutionImageUrl && newStatus === 'Resolved') {
+    await addResolutionEvidence(issueId, actualAdminId, resolutionImageUrl, notes);
   }
 
   return await getIssueById(issueId);
@@ -322,4 +345,12 @@ export async function getLeaderboard(): Promise<{ user: User; points: number; is
     points: (row.issues_count * 10) + row.total_upvotes,
     issuesCount: row.issues_count
   }));
+}
+
+export async function addResolutionEvidence(issueId: string, adminId: string, imageUrl: string, notes?: string) {
+  const stmt = db.prepare(`
+      INSERT INTO resolution_evidence (issue_id, admin_id, image_url, notes, timestamp)
+      VALUES (?, ?, ?, ?, ?)
+  `);
+  stmt.run(issueId, adminId, imageUrl, notes || null, Date.now());
 }
