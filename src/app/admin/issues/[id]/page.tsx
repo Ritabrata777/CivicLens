@@ -12,6 +12,7 @@ import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { UserDetailsDialog } from '@/components/admin/UserDetailsDialog';
 import { IssueImageLightbox } from '@/components/issues/IssueImageLightbox';
+import { DuplicateChecker } from './DuplicateChecker';
 
 export default async function AdminIssueDetailPage({ params }: { params: { id: string } }) {
   const issue = await getIssueById(params.id);
@@ -90,6 +91,11 @@ export default async function AdminIssueDetailPage({ params }: { params: { id: s
           </CardHeader>
           <CardContent>
             <div className="text-sm text-muted-foreground mb-4">Current Status: <StatusBadge status={issue.status} /></div>
+
+            <div className="mb-6">
+              <DuplicateChecker issueId={issue.id} />
+            </div>
+
             <AdminActions issueId={issue.id} currentStatus={issue.status} />
           </CardContent>
         </Card>

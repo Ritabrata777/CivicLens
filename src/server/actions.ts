@@ -255,3 +255,57 @@ export async function getNotificationsAction() {
     return [];
   }
 }
+
+export async function resolveIssueAction(formData: FormData) {
+  try {
+    const cookieStore = await cookies();
+    const sessionToken = cookieStore.get('session_token');
+
+    if (!sessionToken?.value) {
+      return { success: false, message: 'Unauthorized: You must be logged in.' };
+    }
+
+    const user = await getUserById(sessionToken.value);
+    if (!user || user.role !== 'admin') {
+      return { success: false, message: 'Unauthorized: Admin access required.' };
+    }
+
+    const issueId = formData.get('issueId') as string;
+    const notes = formData.get('notes') as string;
+    const txHash = formData.get('txHash') as string;
+    const imageFile = formData.get('image') as File;
+
+    if (!issueId) return { success: false, message: 'Issue ID missing.' };
+
+    let resolutionImageUrl = undefined;
+
+    if (imageFile && imageFile.size > 0 && imageFile.name !== 'undefined') {
+      try {
+        const buffer = Buffer.from(await imageFile.arrayBuffer());
+        const base64 = buffer.toString('base64');
+        const mimeType = imageFile.type || 'image/jpeg';
+        resolutionImageUrl = `data:${mimeType};base64,${base64}`;
+      } catch (err) {
+        console.error("Error processing resolution image:", err);
+        return { success: false, message: 'Failed to process image.' };
+      }
+    }
+
+    if (!resolutionImageUrl) {
+      return { success: false, message: 'Proof of Fix (Image) is required to resolve an issue.' };
+    }
+
+    await updateIssueStatus(issueId, 'Resolved', notes, txHash || undefined, user.id, resolutionImageUrl);
+
+    revalidatePath(`/issues/${issueId}`);
+    revalidatePath(`/admin/issues/${issueId}`);
+    revalidatePath('/admin/dashboard');
+    revalidatePath('/issues');
+    revalidatePath('/profile');
+
+    return { success: true, message: 'Issue resolved with proof!' };
+  } catch (error) {
+    console.error("Resolve Issue Error:", error);
+    return { success: false, message: 'Failed to resolve issue.' };
+  }
+}

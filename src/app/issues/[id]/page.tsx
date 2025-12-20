@@ -90,6 +90,54 @@ export default async function IssueDetailPage({ params }: { params: { id: string
 
           </CardContent>
         </Card>
+
+        {issue.resolutionEvidence && (
+          <Card className="border-green-500/20 bg-green-500/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-400 text-xl">
+                <CheckCircle className="h-6 w-6" />
+                Proof of Fix
+                <span className="text-xs font-normal text-muted-foreground ml-auto bg-background/50 px-2 py-1 rounded-full border">
+                  Verfied by Admin
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Before</p>
+                  <div className="relative h-48 w-full rounded-lg overflow-hidden border bg-background">
+                    {issue.imageUrl ? (
+                      <IssueImageLightbox
+                        imageUrl={issue.imageUrl}
+                        title="Original Issue (Before)"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-muted-foreground bg-muted">No Image</div>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold text-green-600/80 dark:text-green-400/80 uppercase tracking-wide">After (Resolved)</p>
+                  <div className="relative h-48 w-full rounded-lg overflow-hidden border bg-background ring-2 ring-green-500/20">
+                    <IssueImageLightbox
+                      imageUrl={issue.resolutionEvidence.imageUrl}
+                      title="Resolution Proof (After)"
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                </div>
+              </div>
+              {issue.resolutionEvidence.notes && (
+                <div className="mt-4 p-3 bg-background/50 rounded-md border text-sm">
+                  <span className="font-semibold text-foreground">Admin Note: </span>
+                  <span className="text-muted-foreground">"{issue.resolutionEvidence.notes}"</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <div className="space-y-6">

@@ -1,13 +1,15 @@
 
 "use client"
 
-import { updateIssueStatusAction } from "@/server/actions";
+import { useRouter } from "next/navigation";
+import { updateIssueStatusAction, resolveIssueAction } from "@/server/actions";
 import { IssueStatus } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useTransition } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
 
@@ -18,8 +20,10 @@ type AdminActionsProps = {
 
 export function AdminActions({ issueId, currentStatus }: AdminActionsProps) {
     const [isPending, startTransition] = useTransition();
+    const router = useRouter(); // Auto-import if needed, but likely already imported or needs import
     const { toast } = useToast();
     const [notes, setNotes] = useState("");
+    const [proofImage, setProofImage] = useState<File | null>(null);
     const [popoverOpen, setPopoverOpen] = useState(false);
 
     const [pendingStatus, setPendingStatus] = useState<IssueStatus | null>(null);
@@ -68,7 +72,22 @@ export function AdminActions({ issueId, currentStatus }: AdminActionsProps) {
                 }
             }
 
-            const result = await updateIssueStatusAction(issueId, newStatus, notes, txHash);
+            let result;
+            if (newStatus === 'Resolved') {
+                if (!proofImage) {
+                    toast({ title: "Error", description: "Proof of fix image is required.", variant: "destructive" });
+                    return;
+                }
+                const formData = new FormData();
+                formData.append('issueId', issueId);
+                formData.append('notes', notes || '');
+                if (txHash) formData.append('txHash', txHash);
+                formData.append('image', proofImage);
+
+                result = await resolveIssueAction(formData);
+            } else {
+                result = await updateIssueStatusAction(issueId, newStatus, notes, txHash);
+            }
 
             if (result.success) {
                 toast({
@@ -77,6 +96,9 @@ export function AdminActions({ issueId, currentStatus }: AdminActionsProps) {
                 });
                 setPopoverOpen(false);
                 setPendingStatus(null);
+                setProofImage(null);
+                setNotes('');
+                router.refresh();
             } else {
                 toast({
                     title: "Error",
@@ -130,7 +152,7 @@ export function AdminActions({ issueId, currentStatus }: AdminActionsProps) {
                 // To keep it simple with multiple triggers:
                 // We can map the specific buttons that need it to be triggers.
 
-                const needsPopover = status === 'Rejected' || status === 'In Progress';
+                const needsPopover = status === 'Rejected' || status === 'In Progress' || status === 'Resolved';
 
                 if (needsPopover) {
                     return (
@@ -138,6 +160,7 @@ export function AdminActions({ issueId, currentStatus }: AdminActionsProps) {
                             if (open) {
                                 setPendingStatus(status);
                                 setNotes('');
+                                setProofImage(null);
                                 setPopoverOpen(true);
                             } else {
                                 setPopoverOpen(false);
@@ -157,10 +180,10 @@ export function AdminActions({ issueId, currentStatus }: AdminActionsProps) {
                                 <div className="grid gap-4">
                                     <div className="space-y-2">
                                         <h4 className="font-medium leading-none">
-                                            {status === 'Rejected' ? 'Rejection Reason' : 'Add Progress Note'}
+                                            {status === 'Rejected' ? 'Rejection Reason' : status === 'Resolved' ? 'Proof of Fix (Required)' : 'Add Progress Note'}
                                         </h4>
                                         <p className="text-sm text-muted-foreground">
-                                            {status === 'Rejected' ? 'Reason is required.' : 'Optional update note.'}
+                                            {status === 'Rejected' ? 'Reason is required.' : status === 'Resolved' ? 'Admin must upload proof.' : 'Optional update note.'}
                                         </p>
                                     </div>
                                     <div className="grid gap-2">
@@ -169,13 +192,32 @@ export function AdminActions({ issueId, currentStatus }: AdminActionsProps) {
                                             id={`notes-${status}`}
                                             value={notes}
                                             onChange={(e) => setNotes(e.target.value)}
+                                            placeholder={status === 'Resolved' ? "Describe the fix..." : "Note..."}
                                         />
+                                        {status === 'Resolved' && (
+                                            <div className="space-y-1">
+                                                <Label htmlFor="proof-image">Proof Image</Label>
+                                                <Input
+                                                    id="proof-image"
+                                                    type="file"
+                                                    accept="image/*"
+                                                    onChange={(e) => {
+                                                        const file = e.target.files?.[0] || null;
+                                                        setProofImage(file);
+                                                    }}
+                                                />
+                                            </div>
+                                        )}
                                         <Button
                                             onClick={() => {
                                                 handleUpdateStatus(status, notes);
-                                                setPopoverOpen(false); // Close explicitly on success in handleUpdateStatus, but here for click
+                                                // Close handled in handleUpdateStatus logic
                                             }}
-                                            disabled={isPending || (status === 'Rejected' && !notes.trim())}
+                                            disabled={
+                                                isPending ||
+                                                (status === 'Rejected' && !notes.trim()) ||
+                                                (status === 'Resolved' && !proofImage)
+                                            }
                                             variant={status === 'Rejected' ? 'destructive' : 'default'}
                                         >
                                             Confirm
