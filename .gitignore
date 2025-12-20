@@ -18,3 +18,7 @@ yarn-error.log*
 
 # VSCode
 .vscode/
+
+# Local sqlite DB files and write-ahead logs
+civic-lens.db*
+
