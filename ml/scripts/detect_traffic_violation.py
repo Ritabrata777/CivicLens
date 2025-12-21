@@ -80,16 +80,119 @@ def detect_violation(image_path, model_path='ml/runs/detect/train/weights/best.p
                 img = cv2.imread(image_path)
                 if img is not None:
                     roi = img[y1:y2, x1:x2]
-                    # OCR
-                    ocr_result = reader.readtext(roi, detail=0)
-                    if ocr_result:
-                        plate_text = " ".join(ocr_result).upper().replace(" ", "")
+                    
+                    # Upscale for better small text recognition
+                    scale = 3
+                    width = int(roi.shape[1] * scale)
+                    height = int(roi.shape[0] * scale)
+                    roi = cv2.resize(roi, (width, height), interpolation=cv2.INTER_CUBIC)
+
+                    # Preprocessing for better OCR
+                    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+                    
+                    # Enhance contrast
+                    # CLAHE (Contrast Limited Adaptive Histogram Equalization)
+                    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+                    enhanced = clahe.apply(gray)
+                    
+                    # OCR with detail=1 to get bounding boxes
+                    ocr_results = reader.readtext(enhanced, detail=1)
+
+                    if ocr_results:
+                        # Robust Sorting: Top-to-Bottom, Left-to-Right
+                        # 1. Sort by Y first to get rough vertical order
+                        ocr_results.sort(key=lambda x: x[0][0][1])
+                        
+                        # 2. Group into lines based on Y-tolerance
+                        lines = []
+                        current_line = []
+                        last_y = -1
+                        y_tolerance = 20 # pixels
+                        
+                        for res in ocr_results:
+                            y = res[0][0][1]
+                            if last_y == -1 or abs(y - last_y) < y_tolerance:
+                                current_line.append(res)
+                            else:
+                                lines.append(current_line)
+                                current_line = [res]
+                                last_y = y
+                        if current_line:
+                            lines.append(current_line)
+                        
+                        # 3. Sort each line by X and flatten
+                        final_sorted_results = []
+                        for line in lines:
+                            line.sort(key=lambda x: x[0][0][0])
+                            final_sorted_results.extend(line)
+                        
+                        sorted_text = [res[1] for res in final_sorted_results]
+                        
+                        # Semantic Reordering for Indian Plates
+                        
+                        # Valid State Codes from User
+                        VALID_STATES = {
+                            "AN", "AP", "AR", "AS", "BR", "CH", "CG", "DD", "DN", "DL", "GA", "GJ", 
+                            "HR", "HP", "JK", "JH", "KA", "KL", "LA", "LD", "MP", "MH", "MN", "ML", 
+                            "MZ", "NL", "OD", "PY", "PB", "RJ", "SK", "TN", "TS", "TG", "TR", "UP", 
+                            "UK", "WB"
+                        }
+                        
+                        # Common OCR corrections for State Codes
+                        OCR_CORRECTIONS = {
+                            "ME": "WB", # M inverted is W, E often misread B? Or just context 
+                            "MB": "WB",
+                            "MW": "MH",
+                            "MD": "MP" 
+                        }
+                        
+                        ordered_tokens = []
+                        main_number = ""
+                        state_code = ""
+                        others = []
+                        
+                        import re
+                        for token in sorted_text:
+                            # Clean and upper
+                            clean_token = re.sub(r'[^A-Z0-9]', '', token.upper())
+                            if not clean_token: continue
+                            
+                            # Check for 4-digit number (e.g. 6539)
+                            if re.fullmatch(r'\d{4}', clean_token) and not main_number:
+                                main_number = clean_token
+                            
+                            # Check for potential state code (2 letters)
+                            elif re.fullmatch(r'[A-Z]{2}', clean_token) and not state_code:
+                                # 1. Exact match
+                                if clean_token in VALID_STATES:
+                                    state_code = clean_token
+                                # 2. Correction match
+                                elif clean_token in OCR_CORRECTIONS:
+                                    state_code = OCR_CORRECTIONS[clean_token]
+                                else:
+                                    others.append(clean_token)
+                            else:
+                                others.append(clean_token)
+                        
+                        # Assembler: State + Others + Number
+                        final_parts = []
+                        if state_code: final_parts.append(state_code)
+                        final_parts.extend(others)
+                        if main_number: final_parts.append(main_number)
+                        
+                        if not main_number and not state_code:
+                             # Fallback to visual order
+                             plate_text = " ".join(sorted_text).upper()
+                             plate_text = re.sub(r'[^A-Z0-9 ]', '', plate_text)
+                        else:
+                             plate_text = " ".join(final_parts)
     
     return {
         "violation_detected": len(violations) > 0,
         "violations": violations,
         "license_plate": plate_text,
-        "all_detections": boxes_data
+        "all_detections": boxes_data,
+        "raw_ocr": [res[1] for res in ocr_results] if 'ocr_results' in locals() and ocr_results else []
     }
 
 if __name__ == "__main__":
