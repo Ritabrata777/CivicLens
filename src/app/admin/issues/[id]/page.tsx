@@ -14,8 +14,9 @@ import { UserDetailsDialog } from '@/components/admin/UserDetailsDialog';
 import { IssueImageLightbox } from '@/components/issues/IssueImageLightbox';
 import { DuplicateChecker } from './DuplicateChecker';
 
-export default async function AdminIssueDetailPage({ params }: { params: { id: string } }) {
-  const issue = await getIssueById(params.id);
+export default async function AdminIssueDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const issue = await getIssueById(id);
   if (!issue) {
     notFound();
   }

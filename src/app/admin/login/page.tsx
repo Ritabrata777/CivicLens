@@ -16,6 +16,28 @@ export default function AdminLoginPage() {
     const [step, setStep] = useState<"connect" | "register">("connect");
     const [newName, setNewName] = useState("");
 
+    // Auto-login check and session restore
+    useEffect(() => {
+        const checkSession = async () => {
+            const session = localStorage.getItem("civic_admin_session");
+            if (session) {
+                try {
+                    const { address, name } = JSON.parse(session);
+                    if (address) {
+                        // Silently sync session with server
+                        const { adminLoginAction } = await import("@/server/actions");
+                        await adminLoginAction(address, name || "Admin");
+
+                        router.push("/admin/dashboard");
+                    }
+                } catch (e) {
+                    localStorage.removeItem("civic_admin_session");
+                }
+            }
+        };
+        checkSession();
+    }, [router]);
+
     const handleConnect = async () => {
         setLoading(true);
         try {
@@ -40,8 +62,20 @@ export default function AdminLoginPage() {
 
             const name = await getAdminName(address);
             if (name) {
-                toast.success(`Welcome back, ${name}`);
-                router.push("/admin/dashboard");
+                // Determine admin name to use (fetched or default)
+                const adminName = name || "Admin"; // Fallback if name is empty string but account exists
+
+                // Server-side login
+                const { adminLoginAction } = await import("@/server/actions");
+                const result = await adminLoginAction(address, adminName);
+
+                if (result.success) {
+                    localStorage.setItem("civic_admin_session", JSON.stringify({ address, name: adminName }));
+                    toast.success(`Welcome back, ${adminName}`);
+                    router.push("/admin/dashboard");
+                } else {
+                    toast.error(result.message || "Login failed");
+                }
             } else {
                 setStep("register");
                 setLoading(false);
@@ -59,8 +93,20 @@ export default function AdminLoginPage() {
         setLoading(true);
         try {
             await setAdminName(newName);
-            toast.success("Name registered successfully!");
-            router.push("/admin/dashboard");
+
+            if (walletAddress) {
+                // Server-side login
+                const { adminLoginAction } = await import("@/server/actions");
+                const result = await adminLoginAction(walletAddress, newName);
+
+                if (result.success) {
+                    localStorage.setItem("civic_admin_session", JSON.stringify({ address: walletAddress, name: newName }));
+                    toast.success("Name registered successfully!");
+                    router.push("/admin/dashboard");
+                } else {
+                    toast.error(result.message || "Registration failed");
+                }
+            }
         } catch (error) {
             console.error(error);
             toast.error("Failed to register name");

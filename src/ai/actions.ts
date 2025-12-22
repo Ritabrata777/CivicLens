@@ -9,7 +9,7 @@ import os from 'os';
 
 const execAsync = util.promisify(exec);
 // Default exec options: 30s timeout, larger stdout/stderr buffer to accommodate verbose Python libraries
-const EXEC_TIMEOUT_MS = 30_000;
+const EXEC_TIMEOUT_MS = 120_000;
 const DEFAULT_EXEC_OPTIONS = { timeout: EXEC_TIMEOUT_MS, maxBuffer: 20 * 1024 * 1024 };
 
 export async function verifyVoterIdAction(input: VerifyVoterIdInput) {
@@ -29,14 +29,25 @@ export async function verifyVoterIdAction(input: VerifyVoterIdInput) {
         const backPathArg = `"${imagePathBack}"`;
 
         // 2. Define paths
+        // 2. Define paths
         const pythonScript = path.join(process.cwd(), 'ml', 'scripts', 'verify_voter.py');
-        const venvPython = path.join(process.cwd(), 'python', 'venv', 'Scripts', 'python.exe');
-        const pythonStr = fs.existsSync(venvPython) ? `"${venvPython}"` : "python";
+
+        const venvOne = path.join(process.cwd(), '.venv', 'Scripts', 'python.exe');
+        const venvTwo = path.join(process.cwd(), '.venv', 'bin', 'python'); // Linux/Mac
+
+        let pythonExecutable = "python";
+        if (fs.existsSync(venvOne)) {
+            pythonExecutable = `"${venvOne}"`;
+        } else if (fs.existsSync(venvTwo)) {
+            pythonExecutable = `"${venvTwo}"`;
+        } else {
+            console.warn(`[AI] Virtual Environment Python not found at ${venvOne} or ${venvTwo}. Falling back to system 'python'. CWD: ${process.cwd()}`);
+        }
 
         // 3. Execute Python script
         // New signature: verify_voter.py <front_path> <back_path> <voter_id>
         // If back path is missing, passing "NONE" string to python to handle it.
-        const command = `${pythonStr} "${pythonScript}" "${imagePathFront}" ${backPathArg} "${voterIdNumber}"`;
+        const command = `${pythonExecutable} "${pythonScript}" "${imagePathFront}" ${backPathArg} "${voterIdNumber}"`;
         console.log(`Executing: ${command}`);
 
         let stdout: string, stderr: string;
@@ -87,7 +98,7 @@ export async function verifyVoterIdAction(input: VerifyVoterIdInput) {
         return {
             isValid: result.match,
             reason: result.match
-                ? "Voter ID verified successfully (Matches text extracted from image)."
+                ? "Voter ID verified successfully."
                 : `Verification Failed: ${result.reason || "ID Mismatch"}`,
             extractedNumber: result.extracted_text ? result.extracted_text.join(", ") : undefined
         };
@@ -108,13 +119,20 @@ export async function verifyVoterIdAction(input: VerifyVoterIdInput) {
 export async function detectDuplicatesAction(issueId: string) {
     try {
         const pythonScript = path.join(process.cwd(), 'ml', 'scripts', 'detect_duplicates.py');
-        const venvPython = path.join(process.cwd(), 'python', 'venv', 'Scripts', 'python.exe');
-        // Fallback to system python if venv not found. Ensure we quote paths with spaces.
-        const pythonStr = fs.existsSync(venvPython) ? `"${venvPython}"` : "python";
+
+        const venvOne = path.join(process.cwd(), '.venv', 'Scripts', 'python.exe');
+        const venvTwo = path.join(process.cwd(), '.venv', 'bin', 'python'); // Linux/Mac
+
+        let pythonExecutable = "python";
+        if (fs.existsSync(venvOne)) {
+            pythonExecutable = `"${venvOne}"`;
+        } else if (fs.existsSync(venvTwo)) {
+            pythonExecutable = `"${venvTwo}"`;
+        }
 
         const projectRoot = process.cwd();
         // Quote project root too just in case
-        const command = `${pythonStr} "${pythonScript}" "${issueId}" "${projectRoot}"`;
+        const command = `${pythonExecutable} "${pythonScript}" "${issueId}" "${projectRoot}"`;
 
         let stdout: string, stderr: string;
         try {

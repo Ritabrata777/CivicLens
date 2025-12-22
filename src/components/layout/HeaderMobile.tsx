@@ -25,6 +25,9 @@ export function HeaderMobile() {
                         <Link href="/" className="flex items-center gap-2 font-bold text-primary text-lg" onClick={() => setMobileMenuOpen(false)}>
                             <span className="font-headline">Civic Lens</span>
                         </Link>
+                        <Link href="/admin" className="text-sm font-medium hover:text-primary transition-colors" onClick={() => setMobileMenuOpen(false)}>
+                            Admin Portal
+                        </Link>
                     </div>
                 </SheetContent>
             </Sheet>

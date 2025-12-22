@@ -309,3 +309,44 @@ export async function resolveIssueAction(formData: FormData) {
     return { success: false, message: 'Failed to resolve issue.' };
   }
 }
+
+
+export async function adminLoginAction(walletAddress: string, name: string) {
+  try {
+    const { checkIsAdminEnv } = await import('@/lib/web3');
+    const { ensureAdminUser } = await import('@/server/data');
+
+    if (!walletAddress) {
+      return { success: false, message: "Wallet address is required" };
+    }
+
+    const isWhitelisted = checkIsAdminEnv(walletAddress);
+    if (!isWhitelisted) {
+      return { success: false, message: "Unauthorized: Wallet not whitelisted" };
+    }
+
+    const user = await ensureAdminUser(walletAddress, name);
+
+    const cookieStore = await cookies();
+    // Set session (no expires option = session cookie, deleted on browser close)
+    cookieStore.set('session_token', user.id, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      sameSite: 'lax'
+    });
+
+    return { success: true, message: "Login successful" };
+  } catch (error) {
+    console.error("Admin Login Error:", error);
+    return { success: false, message: "Login failed" };
+  }
+
+}
+
+export async function adminLogoutAction() {
+  const cookieStore = await cookies();
+  cookieStore.delete('session_token');
+  revalidatePath('/');
+  return { success: true };
+}

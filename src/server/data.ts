@@ -1,91 +1,85 @@
 import type { Issue, User, IssueStatus, IssueUpdate, BlockchainTransaction, IssueCategory, ResolutionEvidence } from '@/lib/types';
-import db from '@/db';
+import connectToDatabase from '@/lib/db';
+import UserModel from '@/db/models/User';
+import { Issue as IssueModel, IssueUpdate as IssueUpdateModel, IssueUpvote as IssueUpvoteModel } from '@/db/models/Issue';
+import { BlockchainTransaction as BlockchainTransactionModel, ResolutionEvidence as ResolutionEvidenceModel } from '@/db/models/Transaction';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 
-// Helper to map DB user row to User type
-function mapUser(row: any): User {
-  if (!row) return undefined as any;
+// Helper to map Mongoose doc to User type
+function mapUser(doc: any): User {
+  if (!doc) return undefined as any;
+  const obj = doc.toObject ? doc.toObject() : doc;
   return {
-    id: row.id,
-    name: row.name,
-    avatarUrl: row.avatar_url || '',
-    imageHint: row.image_hint || '', // DB might not have this, default empty
-    role: row.role,
-    // We don't expose password or email in the User public interface mostly
+    id: obj._id, // Use string _id
+    name: obj.name,
+    avatarUrl: obj.avatar_url || '',
+    imageHint: obj.image_hint || '',
+    role: obj.role,
   };
 }
 
-// Helper to map DB issue row to Issue type
-function mapIssue(row: any): Issue {
-  if (!row) return undefined as any;
+// Helper to map Mongoose doc to Issue type
+async function mapIssue(doc: any): Promise<Issue> {
+  if (!doc) return undefined as any;
+  const obj = doc.toObject ? doc.toObject() : doc;
 
-  // Fetch updates for this issue
-  const updatesFn = db.prepare('SELECT * FROM issue_updates WHERE issue_id = ? ORDER BY timestamp DESC');
-  const updatesRows = updatesFn.all(row.id) as any[];
-
-  const updates: IssueUpdate[] = updatesRows.map(u => ({
-    timestamp: new Date(u.timestamp), // Stored as Ms or Seconds? Let's use Ms in DB for simplicity
+  // Fetch updates
+  const updatesDocs = await IssueUpdateModel.find({ issue_id: obj._id }).sort({ timestamp: -1 }).lean();
+  const updates = updatesDocs.map((u: any) => ({
+    timestamp: new Date(u.timestamp),
     status: u.status as IssueStatus,
     updatedBy: u.updated_by,
     notes: u.notes
   }));
 
-  // Parse location
-  const location = {
-    lat: row.location_lat,
-    lng: row.location_lng,
-    address: row.location_address
-  };
-
   // Fetch blockchain transaction
-  const txFn = db.prepare('SELECT * FROM blockchain_transactions WHERE issue_id = ? ORDER BY timestamp DESC LIMIT 1');
-  const txRow = txFn.get(row.id) as any;
-
+  const txDoc = await BlockchainTransactionModel.findOne({ issue_id: obj._id }).sort({ timestamp: -1 }).lean();
   let blockchainTransaction: BlockchainTransaction | undefined;
-  if (txRow) {
+  if (txDoc) {
     blockchainTransaction = {
-      txHash: txRow.tx_hash,
-      blockNumber: 0, // Not stored in simplifed DB
-      timestamp: new Date(txRow.timestamp),
-      adminId: txRow.admin_id,
-      status: txRow.status as IssueStatus,
-      // Force OKLink Amoy for all transactions to satisfy user request, ignoring potentially stale DB data
-      explorerUrl: `https://www.oklink.com/amoy/tx/${txRow.tx_hash}`
+      txHash: txDoc.tx_hash,
+      blockNumber: 0,
+      timestamp: new Date(txDoc.timestamp),
+      adminId: txDoc.admin_id,
+      status: txDoc.status as IssueStatus,
+      explorerUrl: txDoc.explorer_url || `https://www.oklink.com/amoy/tx/${txDoc.tx_hash}`
     };
   }
 
   // Fetch resolution evidence
-  const resEvFn = db.prepare('SELECT * FROM resolution_evidence WHERE issue_id = ?');
-  const resEvRow = resEvFn.get(row.id) as any;
-
+  const resEvDoc = await ResolutionEvidenceModel.findOne({ issue_id: obj._id }).lean();
   let resolutionEvidence: ResolutionEvidence | undefined;
-  if (resEvRow) {
+  if (resEvDoc) {
     resolutionEvidence = {
-      id: resEvRow.id,
-      issueId: resEvRow.issue_id,
-      adminId: resEvRow.admin_id,
-      imageUrl: resEvRow.image_url,
-      notes: resEvRow.notes,
-      timestamp: new Date(resEvRow.timestamp)
+      id: (resEvDoc as any)._id.toString(), // Mongoose ObjectId to string
+      issueId: resEvDoc.issue_id,
+      adminId: resEvDoc.admin_id,
+      imageUrl: resEvDoc.image_url,
+      notes: resEvDoc.notes,
+      timestamp: new Date(resEvDoc.timestamp)
     };
   }
 
   return {
-    id: row.id,
-    title: row.title,
-    description: row.description,
-    category: row.category as IssueCategory,
-    status: row.status as IssueStatus,
-    location,
-    imageUrl: row.image_url,
-    imageHint: row.image_hint,
-    submittedBy: row.submitted_by,
-    submittedAt: new Date(row.submitted_at),
-    upvotes: row.upvotes,
+    id: obj._id,
+    title: obj.title,
+    description: obj.description,
+    category: obj.category as IssueCategory,
+    status: obj.status as IssueStatus,
+    location: {
+      lat: obj.location_lat,
+      lng: obj.location_lng,
+      address: obj.location_address
+    },
+    imageUrl: obj.image_url,
+    imageHint: obj.image_hint,
+    submittedBy: obj.submitted_by,
+    submittedAt: new Date(obj.submitted_at),
+    upvotes: obj.upvotes,
     updates,
-    isUrgent: Boolean(row.is_urgent),
-    licensePlate: row.license_plate,
-    violationType: row.violation_type,
+    isUrgent: Boolean(obj.is_urgent),
+    licensePlate: obj.license_plate,
+    violationType: obj.violation_type,
     blockchainTransaction,
     resolutionEvidence
   };
@@ -94,33 +88,73 @@ function mapIssue(row: any): Issue {
 // --- READ operations ---
 
 export async function getIssues(): Promise<Issue[]> {
-  const stmt = db.prepare('SELECT * FROM issues ORDER BY submitted_at DESC');
-  const rows = stmt.all();
-  return rows.map(mapIssue);
+  await connectToDatabase();
+  const docs = await IssueModel.find({}).sort({ submitted_at: -1 }); // Mongoose returns Documents
+  // Parallel mapping might be faster but keep it simple for now
+  return Promise.all(docs.map(doc => mapIssue(doc)));
 }
 
 export async function getIssueById(id: string): Promise<Issue | undefined> {
-  const stmt = db.prepare('SELECT * FROM issues WHERE id = ?');
-  const row = stmt.get(id);
-  return row ? mapIssue(row) : undefined;
+  await connectToDatabase();
+  const doc = await IssueModel.findOne({ _id: id });
+  return doc ? mapIssue(doc) : undefined;
 }
 
 export async function getIssuesByUserId(userId: string): Promise<Issue[]> {
-  const stmt = db.prepare('SELECT * FROM issues WHERE submitted_by = ? ORDER BY submitted_at DESC');
-  const rows = stmt.all(userId);
-  return rows.map(mapIssue);
+  await connectToDatabase();
+  const docs = await IssueModel.find({ submitted_by: userId }).sort({ submitted_at: -1 });
+  return Promise.all(docs.map(doc => mapIssue(doc)));
 }
 
 export async function getUserById(id: string): Promise<User | undefined> {
-  const stmt = db.prepare('SELECT * FROM users WHERE id = ?');
-  const row = stmt.get(id);
-  return row ? mapUser(row) : undefined;
+  await connectToDatabase();
+  const doc = await UserModel.findOne({ _id: id });
+  return doc ? mapUser(doc) : undefined;
 }
 
 export async function getUserByEmail(email: string): Promise<any | undefined> {
-  const stmt = db.prepare('SELECT * FROM users WHERE email = ?');
-  const row = stmt.get(email);
-  return row;
+  await connectToDatabase();
+  const doc = await UserModel.findOne({ email });
+  if (doc) {
+    const obj = doc.toObject();
+    obj.id = obj._id; // Ensure access to id
+    return obj;
+  }
+  return undefined;
+}
+
+export async function ensureAdminUser(walletAddress: string, name: string): Promise<User> {
+  await connectToDatabase();
+  // Normalize address
+  const id = walletAddress.toLowerCase();
+
+  let user = await UserModel.findOne({ _id: id });
+
+  if (!user) {
+    console.log(`[AUTH] Creating new admin user for wallet: ${id}`);
+    user = await UserModel.create({
+      _id: id,
+      email: `admin.${id.substring(0, 8)}@civic.local`, // Mock email
+      password: 'wallet-authenticated', // Placeholder
+      name: name || `Admin ${id.substring(0, 6)}`,
+      role: 'admin',
+      created_at: new Date()
+    });
+  } else {
+    // Ensure role is admin
+    if (user.role !== 'admin') {
+      user.role = 'admin';
+      await user.save();
+    }
+    // Update name if provided and significantly different? 
+    // For now, let's stick to the existing record unless name is empty
+    if (name && (!user.name || user.name.startsWith('Admin 0x'))) {
+      user.name = name;
+      await user.save();
+    }
+  }
+
+  return mapUser(user);
 }
 
 // --- WRITE operations ---
@@ -129,15 +163,15 @@ export async function addIssue(
   data: { title: string; description: string; category: IssueCategory, otherCategory?: string, location: string, isUrgent?: boolean, imageUrl?: string, lat?: string, lng?: string, licensePlate?: string, violationType?: string },
   userId: string
 ): Promise<Issue> {
+  await connectToDatabase();
   const finalCategory = data.category === 'Other' ? data.otherCategory! : data.category;
   const newId = `ISSUE-${Math.floor(Math.random() * 90000) + 10000}`;
-  const now = Date.now(); // Store as Ms
 
   // Parse passed coords
   let lat = data.lat ? parseFloat(data.lat) : NaN;
   let lng = data.lng ? parseFloat(data.lng) : NaN;
 
-  // If coords are missing or invalid, try to geocode the text location
+  // Geocoding logic
   if (isNaN(lat) || isNaN(lng)) {
     try {
       const apiKey = process.env.NEXT_PUBLIC_MAPTILER_API_KEY;
@@ -148,7 +182,6 @@ export async function addIssue(
         if (res.ok) {
           const geoData = await res.json();
           if (geoData.features && geoData.features.length > 0) {
-            // MapTiler/GeoJSON returns [lng, lat]
             const [gLng, gLat] = geoData.features[0].center;
             lat = gLat;
             lng = gLng;
@@ -160,42 +193,33 @@ export async function addIssue(
     }
   }
 
-  // No fallback to New York. If geocoding fails, we store null/invalid.
-  // This prevents misleading map markers.
-  /*
-  if (isNaN(lat) || isNaN(lng)) {
-    lat = 40.7128;
-    lng = -74.0060;
-  }
-  */
+  const newIssue = new IssueModel({
+    _id: newId,
+    title: data.title,
+    description: data.description,
+    category: finalCategory,
+    status: 'Pending',
+    location_address: data.location || "Location not provided",
+    location_lat: isNaN(lat) ? null : lat,
+    location_lng: isNaN(lng) ? null : lng,
+    image_url: data.imageUrl || null,
+    submitted_by: userId,
+    submitted_at: new Date(),
+    upvotes: 0,
+    is_urgent: data.isUrgent ? 1 : 0,
+    license_plate: data.licensePlate || null,
+    violation_type: data.violationType || null
+  });
 
-  // Pick specific placeholder ONLY if we want a default (User requested NO generic photos)
-  // const ph = PlaceHolderImages.find(img => img.id === 'generic-issue-1');
-  const finalImageUrl = data.imageUrl || null; // No fallback image
-
-  const stmt = db.prepare(`
-      INSERT INTO issues (
-        id, title, description, category, status, 
-        location_address, location_lat, location_lng, 
-        image_url, image_hint, submitted_by, submitted_at, 
-        upvotes, is_urgent, license_plate, violation_type
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-  stmt.run(
-    newId, data.title, data.description, finalCategory, 'Pending',
-    data.location || "Location not provided", lat, lng,
-    finalImageUrl, null, userId, now,
-    0, data.isUrgent ? 1 : 0,
-    data.licensePlate || null, data.violationType || null
-  );
+  await newIssue.save();
 
   // Add initial history
-  const updateStmt = db.prepare(`
-        INSERT INTO issue_updates (issue_id, status, timestamp, updated_by, notes)
-        VALUES (?, ?, ?, ?, ?)
-    `);
-  updateStmt.run(newId, 'Pending', now, userId, 'Issue submitted.');
+  await IssueUpdateModel.create({
+    issue_id: newId,
+    status: 'Pending',
+    updated_by: userId,
+    notes: 'Issue submitted.'
+  });
 
   return (await getIssueById(newId))!;
 }
@@ -206,15 +230,16 @@ export async function addBlockchainTransaction(
   adminId: string,
   status: IssueStatus
 ) {
-  const stmt = db.prepare(`
-        INSERT INTO blockchain_transactions (issue_id, tx_hash, admin_id, status, timestamp, explorer_url)
-        VALUES (?, ?, ?, ?, ?, ?)
-    `);
-
-  // Default explorer URL assuming Amoy, can be customized or passed in
+  await connectToDatabase();
   const explorerUrl = `https://www.oklink.com/amoy/tx/${txHash}`;
 
-  stmt.run(issueId, txHash, adminId, status, Date.now(), explorerUrl);
+  await BlockchainTransactionModel.create({
+    issue_id: issueId,
+    tx_hash: txHash,
+    admin_id: adminId,
+    status: status,
+    explorer_url: explorerUrl
+  });
 }
 
 export async function updateIssueStatus(
@@ -225,19 +250,23 @@ export async function updateIssueStatus(
   adminId?: string,
   resolutionImageUrl?: string
 ): Promise<Issue | undefined> {
-  const issue = await getIssueById(issueId);
+  await connectToDatabase();
+  const issue = await IssueModel.findOne({ _id: issueId });
   if (!issue) return undefined;
 
   const actualAdminId = adminId || 'admin-1';
 
-  const stmt = db.prepare('UPDATE issues SET status = ? WHERE id = ?');
-  stmt.run(newStatus, issueId);
+  // Update issue status
+  issue.status = newStatus;
+  await issue.save();
 
-  const updateStmt = db.prepare(`
-        INSERT INTO issue_updates (issue_id, status, timestamp, updated_by, notes)
-        VALUES (?, ?, ?, ?, ?)
-    `);
-  updateStmt.run(issueId, newStatus, Date.now(), actualAdminId, notes || null);
+  // Add update history
+  await IssueUpdateModel.create({
+    issue_id: issueId,
+    status: newStatus,
+    updated_by: actualAdminId,
+    notes: notes || null
+  });
 
   if (txHash) {
     await addBlockchainTransaction(issueId, txHash, actualAdminId, newStatus);
@@ -251,59 +280,48 @@ export async function updateIssueStatus(
 }
 
 export async function incrementUpvote(issueId: string, userId: string): Promise<Issue | undefined> {
-  // Check if already upvoted
-  const checkStmt = db.prepare('SELECT 1 FROM issue_upvotes WHERE issue_id = ? AND user_id = ?');
-  const manualCheck = checkStmt.get(issueId, userId);
+  await connectToDatabase();
 
-  if (manualCheck) {
+  // Check if already upvoted
+  const existing = await IssueUpvoteModel.findOne({ issue_id: issueId, user_id: userId });
+  if (existing) {
     throw new Error('You have already upvoted this issue.');
   }
 
-  // Use transaction to ensure consistency
-  const transaction = db.transaction(() => {
-    // Record the upvote
-    const insertStmt = db.prepare('INSERT INTO issue_upvotes (issue_id, user_id) VALUES (?, ?)');
-    insertStmt.run(issueId, userId);
+  try {
+    // Try to create upvote record
+    await IssueUpvoteModel.create({ issue_id: issueId, user_id: userId });
 
-    // Increment count
-    const updateStmt = db.prepare('UPDATE issues SET upvotes = upvotes + 1 WHERE id = ?');
-    return updateStmt.run(issueId);
-  });
+    // Increment count on issue
+    await IssueModel.updateOne({ _id: issueId }, { $inc: { upvotes: 1 } });
 
-  const info = transaction();
-
-  if (info.changes === 0) return undefined;
-  return await getIssueById(issueId);
+    return await getIssueById(issueId);
+  } catch (e: any) {
+    // Handle duplicate key error if race condition or index violation
+    if (e.code === 11000) {
+      throw new Error('You have already upvoted this issue.');
+    }
+    throw e;
+  }
 }
 
 export async function deleteIssue(issueId: string): Promise<void> {
-  const deleteUpdates = db.prepare('DELETE FROM issue_updates WHERE issue_id = ?');
-  deleteUpdates.run(issueId);
-
-  const deleteIssueStmt = db.prepare('DELETE FROM issues WHERE id = ?');
-  deleteIssueStmt.run(issueId);
+  await connectToDatabase();
+  await IssueUpdateModel.deleteMany({ issue_id: issueId });
+  await IssueModel.deleteOne({ _id: issueId });
 }
 
 export async function getUserNotifications(userId: string): Promise<{ issueId: string; title: string; status: IssueStatus; timestamp: Date }[]> {
+  await connectToDatabase();
   // Get all issues submitted by the user
   const issues = await getIssuesByUserId(userId);
-
-  // For each issue, find updates that are NOT by the user (assuming 'user' check logic or just showing all status changes)
-  // Ideally we filter out the initial "Pending" state if likely created by them, but let's just show recent activity.
-  // A robust system would track "last_seen" or "read" status. For now, simplistically return the latest status update if it wasn't done by the user themselves
-  // OR just return the latest update for all their issues.
 
   const notifications: { issueId: string; title: string; status: IssueStatus; timestamp: Date }[] = [];
 
   for (const issue of issues) {
-    // We look at the latest update (index 0 because we sorted DESC in mapIssue -> Actually mapIssue sorts? 
-    // Wait, mapIssue sorts `issue_updates` by timestamp DESC? 
-    // Let's check mapIssue implementation locally in thi file.
-    // Yes: `ORDER BY timestamp DESC` in mapIssue (line 22).
+    // issue.updates IS ALREADY SORTED DESC in mapIssue
     const latestUpdate = issue.updates[0];
 
-    // If there is an update and it wasn't done by the user (or we just show it to be safe)
-    // For this MVP, let's show it if status is NOT 'Pending' (which is the initial state).
     if (latestUpdate && issue.status !== 'Pending') {
       notifications.push({
         issueId: issue.id,
@@ -314,43 +332,60 @@ export async function getUserNotifications(userId: string): Promise<{ issueId: s
     }
   }
 
-  // Sort by timestamp desc
   return notifications.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 }
 
 export async function getLeaderboard(): Promise<{ user: User; points: number; issuesCount: number }[]> {
-  const stmt = db.prepare(`
-    SELECT 
-      u.id, u.name, u.avatar_url, u.role,
-      COUNT(i.id) as issues_count,
-      COALESCE(SUM(i.upvotes), 0) as total_upvotes
-    FROM users u
-    LEFT JOIN issues i ON u.id = i.submitted_by
-    GROUP BY u.id
-    ORDER BY total_upvotes DESC, issues_count DESC
-    LIMIT 5
-  `);
+  await connectToDatabase();
 
-  const rows = stmt.all() as any[];
+  // This aggregation is complex to port 1:1 perfectly efficient, so we can do application-side aggregation or MongoDB Aggregation Pipeline
+  // Let's use Aggregation Pipeline for efficiency
 
-  return rows.map(row => ({
+  const result = await UserModel.aggregate([
+    {
+      $match: { role: { $ne: 'admin' } }
+    },
+    {
+      $lookup: {
+        from: 'issues', // collection name (mongoose uses lowercased plural by default)
+        localField: '_id',
+        foreignField: 'submitted_by',
+        as: 'issues'
+      }
+    },
+    {
+      $project: {
+        _id: 1,
+        name: 1,
+        avatar_url: 1,
+        role: 1,
+        issues_count: { $size: '$issues' },
+        total_upvotes: { $sum: '$issues.upvotes' }
+      }
+    },
+    { $sort: { total_upvotes: -1, issues_count: -1 } },
+    { $limit: 5 }
+  ]);
+
+  return result.map((row: any) => ({
     user: {
-      id: row.id,
+      id: row._id,
       name: row.name,
       avatarUrl: row.avatar_url || '',
       imageHint: '',
       role: row.role
     },
-    // Simple point system: 10 points per issue + 1 point per upvote
     points: (row.issues_count * 10) + row.total_upvotes,
     issuesCount: row.issues_count
   }));
 }
 
 export async function addResolutionEvidence(issueId: string, adminId: string, imageUrl: string, notes?: string) {
-  const stmt = db.prepare(`
-      INSERT INTO resolution_evidence (issue_id, admin_id, image_url, notes, timestamp)
-      VALUES (?, ?, ?, ?, ?)
-  `);
-  stmt.run(issueId, adminId, imageUrl, notes || null, Date.now());
+  await connectToDatabase();
+  await ResolutionEvidenceModel.create({
+    issue_id: issueId,
+    admin_id: adminId,
+    image_url: imageUrl,
+    notes: notes || null
+  });
 }

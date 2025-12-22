@@ -44,8 +44,11 @@ export async function detectTrafficViolationAction(formData: FormData): Promise<
 
         const pythonScript = path.join(process.cwd(), 'ml', 'scripts', 'detect_traffic_violation.py');
 
+        // Use local virtual environment python
+        const pythonExecutable = path.join(process.cwd(), '.venv', 'Scripts', 'python.exe');
+
         return new Promise((resolve) => {
-            const pythonProcess = spawn('python', [pythonScript, tempFilePath]);
+            const pythonProcess = spawn(pythonExecutable, [pythonScript, tempFilePath]);
 
             let outputData = '';
             let errorData = '';

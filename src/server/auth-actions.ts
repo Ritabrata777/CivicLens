@@ -4,7 +4,8 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
-import db from "@/db";
+import connectToDatabase from "@/lib/db";
+import UserModel from "@/db/models/User";
 
 const registrationSchema = z.object({
     name: z.string().min(2, "Name is required"),
@@ -48,10 +49,11 @@ export async function createUserAction(prevState: RegistrationFormState, formDat
     }
 
     try {
+        await connectToDatabase();
         const { email, password, name, walletAddress } = validatedFields.data;
 
         // Check if user already exists
-        const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+        const existing = await UserModel.findOne({ email });
         if (existing) {
             return { message: "User with this email already exists.", success: false };
         }
@@ -81,21 +83,21 @@ export async function createUserAction(prevState: RegistrationFormState, formDat
         const idFrontUrl = await processImage(validatedFields.data.voterIdPhoto);
         const idBackUrl = await processImage(validatedFields.data.voterIdPhotoBack);
 
-        const stmt = db.prepare(`
-            INSERT INTO users (id, email, password, name, avatar_url, voter_id_front_url, voter_id_back_url, role)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'user')
-        `);
-
-        stmt.run(newId, email, password, name, avatarUrl, idFrontUrl, idBackUrl);
+        await UserModel.create({
+            _id: newId,
+            email,
+            password,
+            name,
+            avatar_url: avatarUrl,
+            voter_id_front_url: idFrontUrl,
+            voter_id_back_url: idBackUrl,
+            role: 'user'
+        });
 
         console.log("User created in DB:", email);
 
         // SET COOKIE
         const cookieStore = await cookies();
-        // We store the ID now, or email. The data layer uses getUserById, but our session check uses email? 
-        // Let's stick to email as the session token key for now to match verify logic.
-        // Ideally we'd store a session ID that maps to a user ID.
-        // But for this simplified flow:
         cookieStore.set('session_token', newId, { httpOnly: true, path: '/' });
 
         revalidatePath('/profile');
@@ -134,12 +136,13 @@ export async function loginUserAction(prevState: LoginFormState, formData: FormD
     const { email, password } = validatedFields.data;
 
     try {
-        const row = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as any;
+        await connectToDatabase();
+        const user = await UserModel.findOne({ email });
 
-        if (row && row.password === password) {
+        if (user && user.password === password) {
             // Create session
             const cookieStore = await cookies();
-            cookieStore.set('session_token', row.id, { httpOnly: true, path: '/' });
+            cookieStore.set('session_token', user._id, { httpOnly: true, path: '/' });
 
             return { message: "Login successful!", success: true };
         } else {
@@ -153,4 +156,3 @@ export async function loginUserAction(prevState: LoginFormState, formData: FormD
         return { message: "An error occurred", success: false };
     }
 }
-

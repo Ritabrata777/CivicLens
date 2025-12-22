@@ -1,0 +1,44 @@
+
+# ----------------------------------------------------------------------
+# CIVIC LENS PROJECT SETUP COMMANDS
+# ----------------------------------------------------------------------
+
+# 1. Frontend & Backend (Node.js)
+# Install all JavaScript/TypeScript dependencies listed in package.json
+npm install
+
+# 2. Python Environment & ML Libraries
+# It is best practice to use a virtual environment
+python -m venv .venv
+
+# Activate the virtual environment (Windows Powershell)
+.\.venv\Scripts\Activate.ps1
+
+# Upgrade pip to ensure smooth installation
+python -m pip install --upgrade pip
+
+# Install required ML libraries
+# Includes:
+# - easyocr: Optical Character Recognition
+# - ultralytics: YOLOv8 for Object Detection
+# - sentence-transformers: For semantic text similarity
+# - torch: PyTorch (backend for all above)
+# - opencv-python-headless: Computer Vision tools
+pip install easyocr ultralytics opencv-python-headless sentence-transformers torch torchvision torchaudio
+
+# 3. Download ALL ML Models
+# This script will now download:
+# - Sentence Transformer (all-MiniLM-L6-v2)
+# - YOLOv8 Nano (yolov8n.pt) base model
+# - EasyOCR English models
+python ml/scripts/download_model.py
+
+# 4. Database Setup (If clean install)
+# Seed the initial admin user and database tables
+node scripts/seed-db.js
+node scripts/seed-mongo.cjs
+
+# ----------------------------------------------------------------------
+# START THE APPLICATION
+# ----------------------------------------------------------------------
+npm run dev

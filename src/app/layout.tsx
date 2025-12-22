@@ -5,6 +5,7 @@ import { Toaster as SonnerToaster } from '@/components/ui/sonner';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { ThemeProvider } from '@/components/layout/ThemeProvider';
+import Aurora from '@/frontend/components/Aurora';
 
 export const metadata: Metadata = {
   title: 'Civic Lens',
@@ -34,6 +35,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <Header />
+          
           <main className="flex-grow container mx-auto px-4 py-8">
             {children}
           </main>
