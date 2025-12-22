@@ -4,6 +4,9 @@ import { ShieldCheck, Users, TrendingUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getLeaderboard } from '@/server/data';
 import { LeaderboardReveal } from '@/components/home/LeaderboardReveal';
+import Aurora from '@/frontend/components/Aurora';
+import GradientText from '../frontend/components/GradientText'
+
 
 const features = [
   {
@@ -27,14 +30,29 @@ export default async function WelcomePage() {
   const leaderboardEntries = await getLeaderboard();
 
   return (
+    <>
     <div className="space-y-20">
-      <section className="text-center py-16 lg:py-24 relative overflow-hidden">
+      <section className="text-center relative overflow-hidden py-16 -mx-20 -my-8">
         {/* Subtle background decoration could go here */}
-        <div className="container mx-auto px-4 relative z-10">
+        <div className="absolute inset-0 z-0 pointer-events-none">
+            <Aurora
+              colorStops={["#3A29FF", "#FF94B4", "#FF3232"]}
+              blend={10}
+              amplitude={1.0}
+              speed={1.3}
+            />
+        </div>
+        <div className="container mx-auto px-20 relative z-10 ">
+          
           <div className="flex flex-col items-center justify-center gap-2 mb-6">
-            <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-primary font-headline bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/60">
-              Civic Lens
-            </h1>
+            <GradientText
+                colors={["#40ffaa", "#4079ff", "#40ffaa", "#4079ff", "#02386E"]}
+                animationSpeed={10}
+                showBorder={false}
+                className="custom-class text-7xl md:text-9xl font-bold"
+            >
+              Civic Lens 
+            </GradientText>
             <span className="text-xl md:text-2xl font-light text-muted-foreground uppercase tracking-widest">
               Empowering Communities
             </span>
@@ -107,5 +125,6 @@ export default async function WelcomePage() {
         </div>
       </section>
     </div>
+    </>
   );
 }

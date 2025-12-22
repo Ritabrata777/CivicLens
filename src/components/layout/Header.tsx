@@ -4,6 +4,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { HeaderActions } from "./HeaderActions";
 import { HeaderMobile } from "./HeaderMobile";
 import { cookies } from "next/headers";
+import Font_civicLens from "./Font_civicLens";
 
 export async function Header() {
   const cookieStore = await cookies();
@@ -12,11 +13,13 @@ export async function Header() {
 
   return (
     <header className="bg-card shadow-sm sticky top-0 z-40">
-      <div className="container mx-auto px-4">
+      <div className="container mx-auto px-10">
         <div className="flex justify-between items-center h-16">
           <Link href="/" className="flex items-center gap-2 font-bold text-primary text-lg">
             <Image src="/logo.png" alt="Civic Lens Logo" width={32} height={32} />
-            <span className="font-headline">Civic Lens</span>
+            <div>
+              <Font_civicLens/>
+            </div>
           </Link>
 
           <nav className="hidden md:flex items-center gap-6">
