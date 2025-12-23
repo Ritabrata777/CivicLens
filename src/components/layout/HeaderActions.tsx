@@ -11,6 +11,7 @@ import { getNotificationsAction } from "@/server/actions";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { IssueStatus } from "@/lib/types";
+import { adminLogoutAction } from "@/server/actions";
 
 interface Notification {
     issueId: string;
@@ -64,12 +65,20 @@ export function HeaderActions({ isLoggedIn }: { isLoggedIn?: boolean }) {
         }
     }, [localIsLoggedIn, notificationsOpen]);
 
-    const handleLogout = () => {
-        document.cookie = 'session_token=; Max-Age=0; path=/'; // Client side clear
+
+
+
+    const handleLogout = async () => {
+        // Optimistic update
         setLocalIsLoggedIn(false);
         setNotifications([]);
+
+        // Server logout (clears httpOnly cookie)
+        await adminLogoutAction();
+
+        // Force reload/refresh
         router.refresh();
-        window.location.reload(); // Force reload to clear server state
+        window.location.reload();
     };
 
     if (localIsLoggedIn) {

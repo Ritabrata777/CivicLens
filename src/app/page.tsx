@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getLeaderboard } from '@/server/data';
 import { LeaderboardReveal } from '@/components/home/LeaderboardReveal';
 import Aurora from '@/frontend/components/Aurora';
-import GradientText from '../frontend/components/GradientText'
+import GradientText from '@/frontend/components/GradientText'
 
 
 const features = [

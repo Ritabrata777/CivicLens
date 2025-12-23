@@ -42,7 +42,7 @@ export default async function ProfilePage() {
         </Avatar>
         <div>
           <h1 className="text-3xl font-bold font-headline text-primary">{user?.name}</h1>
-          <p className="text-muted-foreground">Community Contributor</p>
+          <p className="text-muted-foreground">{user?.role === 'admin' ? 'Administrator' : 'Community Contributor'}</p>
         </div>
       </div>
 
