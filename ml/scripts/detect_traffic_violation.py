@@ -20,7 +20,10 @@ class SuppressOutput:
 with SuppressOutput():
     import cv2
     import easyocr
+    import cv2
+    import easyocr
     from ultralytics import YOLO
+    import re
 
 # Initialize EasyOCR Reader silently
 with SuppressOutput():
@@ -52,140 +55,157 @@ def detect_violation(image_path, model_path='ml/runs/detect/train/weights/best.p
     plate_text = ""
     boxes_data = []
     
+    # Helper to calculate IoU
+    def get_iou(boxA, boxB):
+        xA = max(boxA[0], boxB[0])
+        yA = max(boxA[1], boxB[1])
+        xB = min(boxA[2], boxB[2])
+        yB = min(boxA[3], boxB[3])
+        interArea = max(0, xB - xA) * max(0, yB - yA)
+        boxAArea = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1])
+        boxBArea = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1])
+        iou = interArea / float(boxAArea + boxBArea - interArea)
+        return iou
+
+    # Collect all boxes first
+    all_boxes = []
     for r in results:
         for box in r.boxes:
             cls = int(box.cls[0])
             conf = float(box.conf[0])
             xyxy = box.xyxy[0].tolist()
             label = model.names[cls]
-            
-            boxes_data.append({
+            all_boxes.append({
                 "label": label,
                 "confidence": conf,
-                "bbox": xyxy
+                "bbox": xyxy,
+                "cls": cls
             })
+    
+    # Process Logic
+    for box_data in all_boxes:
+        cls = box_data['cls']
+        conf = box_data['confidence']
+        xyxy = box_data['bbox']
+        label = box_data['label']
+        
+        boxes_data.append({
+            "label": label,
+            "confidence": conf,
+            "bbox": xyxy
+        })
+        
+        # Helper to crop image for OCR
+        x1, y1, x2, y2 = map(int, xyxy)
             
-            # Helper to crop image for OCR
-            x1, y1, x2, y2 = map(int, xyxy)
+        if cls == 1: # without helmet
+            # Check if we have a conflicting "with helmet" detection
+            is_false_positive = False
+            for other_box in all_boxes:
+                if other_box['label'] == 'with helmet' and other_box['confidence'] > 0.25:
+                    iou = get_iou(xyxy, other_box['bbox'])
+                    if iou > 0.25: # Significant overlap
+                        is_false_positive = True
+                        break
             
-            if cls == 1: # without helmet
+            if not is_false_positive and conf > 0.5:
                 violations.append({
                     "type": "No Helmet",
                     "confidence": conf,
                     "bbox": xyxy
                 })
-            
-            if cls == 3: # number plate
-                # Crop and read
-                img = cv2.imread(image_path)
-                if img is not None:
-                    roi = img[y1:y2, x1:x2]
-                    
-                    # Upscale for better small text recognition
-                    scale = 3
-                    width = int(roi.shape[1] * scale)
-                    height = int(roi.shape[0] * scale)
-                    roi = cv2.resize(roi, (width, height), interpolation=cv2.INTER_CUBIC)
+        
+        if cls == 3: # number plate
+            # Crop and read
+            img = cv2.imread(image_path)
+            if img is not None:
+                roi = img[y1:y2, x1:x2]
+                
+                # Upscale for better small text recognition
+                scale = 3
+                width = int(roi.shape[1] * scale)
+                height = int(roi.shape[0] * scale)
+                roi = cv2.resize(roi, (width, height), interpolation=cv2.INTER_CUBIC)
 
-                    # Preprocessing for better OCR
-                    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-                    
-                    # Enhance contrast
-                    # CLAHE (Contrast Limited Adaptive Histogram Equalization)
-                    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-                    enhanced = clahe.apply(gray)
-                    
-                    # OCR with detail=1 to get bounding boxes
-                    ocr_results = reader.readtext(enhanced, detail=1)
+                # Preprocessing for better OCR
+                gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+                
+                # Enhance contrast
+                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+                enhanced = clahe.apply(gray)
+                
+                # OCR with detail=1 to get bounding boxes
+                ocr_results = reader.readtext(enhanced, detail=1)
 
-                    if ocr_results:
-                        # Robust Sorting: Top-to-Bottom, Left-to-Right
-                        # 1. Sort by Y first to get rough vertical order
-                        ocr_results.sort(key=lambda x: x[0][0][1])
-                        
-                        # 2. Group into lines based on Y-tolerance
-                        lines = []
-                        current_line = []
-                        last_y = -1
-                        y_tolerance = 20 # pixels
-                        
-                        for res in ocr_results:
-                            y = res[0][0][1]
-                            if last_y == -1 or abs(y - last_y) < y_tolerance:
-                                current_line.append(res)
-                            else:
-                                lines.append(current_line)
-                                current_line = [res]
-                                last_y = y
-                        if current_line:
-                            lines.append(current_line)
-                        
-                        # 3. Sort each line by X and flatten
-                        final_sorted_results = []
-                        for line in lines:
-                            line.sort(key=lambda x: x[0][0][0])
-                            final_sorted_results.extend(line)
-                        
-                        sorted_text = [res[1] for res in final_sorted_results]
-                        
-                        # Semantic Reordering for Indian Plates
-                        
-                        # Valid State Codes from User
-                        VALID_STATES = {
-                            "AN", "AP", "AR", "AS", "BR", "CH", "CG", "DD", "DN", "DL", "GA", "GJ", 
-                            "HR", "HP", "JK", "JH", "KA", "KL", "LA", "LD", "MP", "MH", "MN", "ML", 
-                            "MZ", "NL", "OD", "PY", "PB", "RJ", "SK", "TN", "TS", "TG", "TR", "UP", 
-                            "UK", "WB"
-                        }
-                        
-                        # Common OCR corrections for State Codes
-                        OCR_CORRECTIONS = {
-                            "ME": "WB", # M inverted is W, E often misread B? Or just context 
-                            "MB": "WB",
-                            "MW": "MH",
-                            "MD": "MP" 
-                        }
-                        
-                        ordered_tokens = []
-                        main_number = ""
-                        state_code = ""
-                        others = []
-                        
-                        import re
-                        for token in sorted_text:
-                            # Clean and upper
-                            clean_token = re.sub(r'[^A-Z0-9]', '', token.upper())
-                            if not clean_token: continue
-                            
-                            # Check for 4-digit number (e.g. 6539)
-                            if re.fullmatch(r'\d{4}', clean_token) and not main_number:
-                                main_number = clean_token
-                            
-                            # Check for potential state code (2 letters)
-                            elif re.fullmatch(r'[A-Z]{2}', clean_token) and not state_code:
-                                # 1. Exact match
-                                if clean_token in VALID_STATES:
-                                    state_code = clean_token
-                                # 2. Correction match
-                                elif clean_token in OCR_CORRECTIONS:
-                                    state_code = OCR_CORRECTIONS[clean_token]
-                                else:
-                                    others.append(clean_token)
-                            else:
-                                others.append(clean_token)
-                        
-                        # Assembler: State + Others + Number
-                        final_parts = []
-                        if state_code: final_parts.append(state_code)
-                        final_parts.extend(others)
-                        if main_number: final_parts.append(main_number)
-                        
-                        if not main_number and not state_code:
-                             # Fallback to visual order
-                             plate_text = " ".join(sorted_text).upper()
-                             plate_text = re.sub(r'[^A-Z0-9 ]', '', plate_text)
+                if ocr_results:
+                    # Robust Sorting: Top-to-Bottom, Left-to-Right
+                    ocr_results.sort(key=lambda x: x[0][0][1])
+                    
+                    lines = []
+                    current_line = []
+                    last_y = -1
+                    y_tolerance = 20 
+                    
+                    for res in ocr_results:
+                        y = res[0][0][1]
+                        if last_y == -1 or abs(y - last_y) < y_tolerance:
+                            current_line.append(res)
                         else:
-                             plate_text = " ".join(final_parts)
+                            lines.append(current_line)
+                            current_line = [res]
+                            last_y = y
+                    if current_line:
+                        lines.append(current_line)
+                    
+                    final_sorted_results = []
+                    for line in lines:
+                        line.sort(key=lambda x: x[0][0][0])
+                        final_sorted_results.extend(line)
+                    
+                    sorted_text = [res[1] for res in final_sorted_results]
+                    
+                    # Semantic Reordering for Indian Plates
+                    VALID_STATES = {
+                        "AN", "AP", "AR", "AS", "BR", "CH", "CG", "DD", "DN", "DL", "GA", "GJ", 
+                        "HR", "HP", "JK", "JH", "KA", "KL", "LA", "LD", "MP", "MH", "MN", "ML", 
+                        "MZ", "NL", "OD", "PY", "PB", "RJ", "SK", "TN", "TS", "TG", "TR", "UP", 
+                        "UK", "WB"
+                    }
+                    
+                    OCR_CORRECTIONS = {
+                        "ME": "WB", "MB": "WB", "MW": "MH", "MD": "MP", "D": "UP", "0": "Q"
+                    }
+
+                    # Improved Logic: Find State, District (Digits), Series (Letters), Number (Digits)
+                    full_str = "".join(sorted_text).upper()
+                    clean_str = re.sub(r'[^A-Z0-9]', '', full_str)
+                    
+                    # Regex for standard format: Adjusted to allow 1-2 chars for state
+                    # Group 1: State (1-2 chars)
+                    # Group 2: District (2 digits)
+                    # Group 3: Series (1-3 chars/digits mixed)
+                    # Group 4: Number (4 digits)
+                    match = re.search(r'([A-Z]{1,2})[ .]?(\d{2})[ .]?([A-Z0-9]{1,3})[ .]?(\d{4})', clean_str)
+                    
+                    if match:
+                        state, district, series, number = match.groups()
+                        
+                        # Fix Series: Replace 0 with Q
+                        series = series.replace('0', 'Q')
+                        
+                        # Re-verify state
+                        if state in OCR_CORRECTIONS:
+                            state = OCR_CORRECTIONS[state]
+                            
+                        plate_text = f"{state} {district} {series} {number}"
+                    else:
+                        # Fallback
+                        plate_text = " ".join(sorted_text).upper()
+                        plate_text = re.sub(r'[^A-Z0-9 ]', '', plate_text)
+                        
+                        # Check if we can apply simple corrections on the fallback string
+                        # e.g. replace 0E with QE if found?
+                        pass
     
     return {
         "violation_detected": len(violations) > 0,
