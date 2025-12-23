@@ -5,7 +5,6 @@ import { Toaster as SonnerToaster } from '@/components/ui/sonner';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { ThemeProvider } from '@/components/layout/ThemeProvider';
-import Aurora from '@/frontend/components/Aurora';
 
 export const metadata: Metadata = {
   title: 'Civic Lens',

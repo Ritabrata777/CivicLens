@@ -5,6 +5,7 @@ import { HeaderActions } from "./HeaderActions";
 import { HeaderMobile } from "./HeaderMobile";
 import { cookies } from "next/headers";
 import Font_civicLens from "./Font_civicLens";
+import { Button } from "../ui/button";
 
 export async function Header() {
   const cookieStore = await cookies();
@@ -17,15 +18,17 @@ export async function Header() {
         <div className="flex justify-between items-center h-16">
           <Link href="/" className="flex items-center gap-2 font-bold text-primary text-lg">
             <Image src="/logo.png" alt="Civic Lens Logo" width={32} height={32} />
-            <div>
+            <div className="w-[10ch] sm:w-[12ch] md:w-[14ch]">
               <Font_civicLens />
             </div>
           </Link>
 
           <nav className="hidden md:flex items-center gap-6">
-            <Link href="/admin" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
+            <Button size="sm" variant="ghost">
+              <Link href="/admin">
               Admin Portal
-            </Link>
+              </Link>
+            </Button>
           </nav>
 
           <div className="flex items-center gap-2">
