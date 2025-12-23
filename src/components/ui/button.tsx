@@ -24,7 +24,7 @@ const buttonVariants = cva(
           "bg-[linear-gradient(15deg,#2F3BFF_0%,#FF3232_40%,#000080_75%,#000080_100%)]",
           "bg-[length:300%_300%]",
           "bg-[position:0%_50%]",
-          "animate-[civic-gradient-drift_20s_ease-in-out_infinite]",
+          "hover:animate-[civic-gradient-drift_20s_ease-in-out_infinite]",
 
           // hover modulation (not replacement)
           "hover:shadow-[0_4px_10px_rgba(47,59,255,100)]",
@@ -37,22 +37,22 @@ const buttonVariants = cva(
           "bg-[linear-gradient(135deg,rgba(47,59,255,0.15)_0%,rgba(58,41,255,0.15)_45%,rgba(255,148,180,0.15)_75%,rgba(255,50,50,0.15)_100%)]",
           "bg-[length:300%_300%]",
           "bg-[position:0%_50%]",
-          "animate-[civic-gradient-drift_18s_ease-in-out_infinite]",
+          "hover:animate-[civic-gradient-drift_20s_ease-in-out_infinite]",
 
           "hover:shadow-[0_4px_10px_rgba(47,59,255,100)]",
           "hover:bg-[position:150%_50%]"
         ),
 
         ghost: cn(
-          "text-foreground",
+          "border border-input text-foreground",
 
-          "bg-[linear-gradient(135deg,rgba(47,59,255,0.10),rgba(58,41,255,0.10),rgba(255,148,180,0.10),rgba(255,50,50,0.10))]",
+          "bg-[linear-gradient(135deg,rgba(47,59,255,0.15)_0%,rgba(58,41,255,0.15)_45%,rgba(255,148,180,0.15)_75%,rgba(255,50,50,0.15)_100%)]",
           "bg-[length:300%_300%]",
           "bg-[position:0%_50%]",
-          "animate-[civic-gradient-drift_20s_ease-in-out_infinite]",
+          "hover:animate-[civic-gradient-drift_20s_ease-in-out_infinite]",
 
-          "hover:shadow-[0_4px_14px_rgba(47,59,255,0.10)]",
-          "hover:bg-[position:100%_50%]"
+          "hover:shadow-[0_4px_10px_rgba(47,59,255,100)]",
+          "hover:bg-[position:150%_50%]"
         ),
 
         destructive:
@@ -78,6 +78,7 @@ const buttonVariants = cva(
     },
   }
 );
+
 
 
 
