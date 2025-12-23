@@ -6,7 +6,7 @@ import { z } from "zod";
 import { addIssue, incrementUpvote, updateIssueStatus, getUserById, getUserNotifications, deleteIssue } from "./data";
 import type { IssueStatus } from "@/lib/types";
 import { issueCategories } from "@/lib/types";
-
+import { detectDuplicatesAction } from "@/ai/actions";
 const issueSchema = z.object({
   title: z.string().min(5, "Title must be at least 5 characters long"),
   description: z.string().min(20, "Description must be at least 20 characters long"),
@@ -111,6 +111,7 @@ export async function createIssueAction(prevState: FormState, formData: FormData
     try {
       const { analyzeIssueFlow } = await import('@/ai/flows/analyze-issue');
 
+
       console.log("[AI] Starting analysis...");
       const aiResult = await analyzeIssueFlow({
         title: validatedFields.data.title,
@@ -151,15 +152,32 @@ export async function createIssueAction(prevState: FormState, formData: FormData
       violationType: validatedFields.data.violationType
     }, userId);
 
+    // Run REAL duplicate detection via Python script (MongoDB based)
+    let finalMessage = "Issue submitted successfully!";
+    if (aiCategory !== validatedFields.data.category) {
+      finalMessage += ` (Auto-categorized as ${aiCategory})`;
+    }
+
+    try {
+      // Small delay to ensure DB write is visible? Usually not needed if awaited, but safe to know.
+      const dupResult = await detectDuplicatesAction(newIssue.id);
+      if (dupResult.matches && dupResult.matches.length > 0) {
+        // Pick the top match
+        const topMatch = dupResult.matches[0];
+        finalMessage += ` This looks like a duplicate of issue #${topMatch.id} (Match: ${topMatch.score}%).`;
+      } else {
+        finalMessage += " This is a new issue.";
+      }
+    } catch (err) {
+      console.error("Post-creation duplicate check failed:", err);
+      // Don't fail the request, just don't show the msg
+    }
+
     revalidatePath('/');
     revalidatePath('/profile');
     revalidatePath('/admin/dashboard');
 
-    let successMessage = "Issue submitted successfully!";
-    if (duplicateWarning) successMessage += duplicateWarning;
-    else if (aiCategory !== validatedFields.data.category) successMessage += ` (Auto-categorized as ${aiCategory})`;
-
-    return { message: successMessage, success: true, issueId: newIssue.id };
+    return { message: finalMessage, success: true, issueId: newIssue.id };
   } catch (e) {
     console.error("Create Issue Error:", e);
     return { message: "Failed to create issue.", success: false };

@@ -8,3 +8,5 @@ numpy
 ultralytics
 imagehash
 sentence_transformers
+pymongo
+

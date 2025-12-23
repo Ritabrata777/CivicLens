@@ -132,7 +132,9 @@ export async function detectDuplicatesAction(issueId: string) {
 
         const projectRoot = process.cwd();
         // Quote project root too just in case
-        const command = `${pythonExecutable} "${pythonScript}" "${issueId}" "${projectRoot}"`;
+        const mongoUri = process.env.MONGODB_URI || "";
+        const dbName = process.env.MONGODB_DB_NAME || "";
+        const command = `${pythonExecutable} "${pythonScript}" "${issueId}" "${projectRoot}" "${mongoUri}" "${dbName}"`;
 
         let stdout: string, stderr: string;
         try {
