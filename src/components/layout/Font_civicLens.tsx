@@ -5,17 +5,14 @@ import RotatingText from "@/frontend/components/RotatingText"
 
 export default function FontCivicLens() {
     return (
-
-
         <span className="inline-flex items-baseline gap-2">
-
-            <span className=" text-blue-100">
+            <span className="">
                 Civic
             </span>
-            <span className="inline-flex items-baseline bg-blue">
+            <span className="inline-flex items-baseline bg-blue rounded-full">
                 <RotatingText
                     texts={['Lens!', 'Sense!', 'Power!']}
-                    mainClassName="px-1 sm:px-2 md:px-1 text-white overflow-hidden py-0.5 sm:py-1 md:py-1 justify-center rounded-lg"
+                    mainClassName="px-1 sm:px-2 md:px-1 overflow-hidden py-0.5 sm:py-1 md:py-1 justify-center rounded-lg"
                     staggerFrom={"last"}
                     initial={{ y: "100%" }}
                     animate={{ y: 0 }}
