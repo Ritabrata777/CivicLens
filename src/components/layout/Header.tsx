@@ -4,7 +4,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { HeaderActions } from "./HeaderActions";
 import { HeaderMobile } from "./HeaderMobile";
 import { cookies } from "next/headers";
-import Font_civicLens from "./Font_civicLens";
+import FontCivicLens from "../ui/header-civicLens";
 import { Button } from "../ui/button";
 
 export async function Header() {
@@ -19,7 +19,7 @@ export async function Header() {
           <Link href="/" className="flex items-center gap-2 font-bold text-primary text-lg">
             <Image src="/logo.png" alt="Civic Lens Logo" width={32} height={32} />
             <div className="w-[10ch] sm:w-[12ch] md:w-[14ch]">
-              <Font_civicLens />
+              <FontCivicLens />
             </div>
           </Link>
 

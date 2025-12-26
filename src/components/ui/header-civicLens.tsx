@@ -1,7 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
-import RotatingText from "@/frontend/components/RotatingText"
+import RotatingText from "./RotatingText"
 
 export default function FontCivicLens() {
     return (
