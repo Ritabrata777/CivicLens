@@ -4,8 +4,8 @@ import { ShieldCheck, Users, TrendingUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getLeaderboard } from '@/server/data';
 import { LeaderboardReveal } from '@/components/home/LeaderboardReveal';
-import Aurora from '@/frontend/components/Aurora';
-import GradientText from '@/frontend/components/GradientText'
+import Aurora from '@/components/ui/Aurora';
+import CivicLens from '@/components/ui/bodyText-civicLens';
 
 
 const features = [
@@ -44,14 +44,7 @@ export default async function WelcomePage() {
           
           <div className="relative z-10 px-4 sm:px-8 lg:px-20 py-16 -mt-12 sm:-mt-16">
             <div className="flex flex-col items-center justify-center gap-2 mb-6 ">
-              <GradientText
-                colors={["#40ffaa", "#4079ff", "#40ffaa", "#4079ff", "#02386E"]}
-                animationSpeed={10}
-                showBorder={false}
-                className="text-7xl md:text-9xl font-bold"
-              >
-                Civic Lens
-              </GradientText>
+              <CivicLens />
               <span className="text-xl md:text-2xl font-light text-muted-foreground uppercase tracking-widest">
                 Empowering Communities
               </span>

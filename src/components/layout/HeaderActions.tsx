@@ -125,7 +125,7 @@ export function HeaderActions({ isLoggedIn }: { isLoggedIn?: boolean }) {
                     </PopoverContent>
                 </Popover>
 
-                <Link href="/profile">
+                <Link href="/profile" className="hidden md:block">
                     <Button variant="ghost" size="icon">
                         <UserIcon className="h-5 w-5" />
                     </Button>
