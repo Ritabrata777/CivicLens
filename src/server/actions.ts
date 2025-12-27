@@ -329,19 +329,39 @@ export async function resolveIssueAction(formData: FormData) {
 }
 
 
+
+export async function getAdminProfileAction(walletAddress: string) {
+  try {
+    const { getUserById } = await import('@/server/data');
+    if (!walletAddress) return { exists: false };
+
+    // Address is used as ID in our system logic for admins
+    const user = await getUserById(walletAddress.toLowerCase());
+
+    if (user && user.role === 'admin') {
+      return { exists: true, name: user.name };
+    }
+    return { exists: false };
+  } catch (error) {
+    console.error("Get Admin Profile Error:", error);
+    return { exists: false };
+  }
+}
+
 export async function adminLoginAction(walletAddress: string, name: string) {
   try {
-    const { checkIsAdminEnv } = await import('@/lib/web3');
     const { ensureAdminUser } = await import('@/server/data');
 
     if (!walletAddress) {
       return { success: false, message: "Wallet address is required" };
     }
 
-    const isWhitelisted = checkIsAdminEnv(walletAddress);
-    if (!isWhitelisted) {
-      return { success: false, message: "Unauthorized: Wallet not whitelisted" };
-    }
+    // Removed whitelist check to allow anyone to register/login as requested
+    // const { checkIsAdminEnv } = await import('@/lib/web3');
+    // const isWhitelisted = checkIsAdminEnv(walletAddress);
+    // if (!isWhitelisted) {
+    //   return { success: false, message: "Unauthorized: Wallet not whitelisted" };
+    // }
 
     const user = await ensureAdminUser(walletAddress, name);
 
@@ -359,7 +379,6 @@ export async function adminLoginAction(walletAddress: string, name: string) {
     console.error("Admin Login Error:", error);
     return { success: false, message: "Login failed" };
   }
-
 }
 
 export async function adminLogoutAction() {
@@ -368,3 +387,4 @@ export async function adminLogoutAction() {
   revalidatePath('/');
   return { success: true };
 }
+
