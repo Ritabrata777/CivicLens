@@ -1,0 +1,12 @@
+
+easyocr
+opencv-python-headless
+torch
+torchvision
+torchaudio
+numpy
+ultralytics
+imagehash
+sentence_transformers
+pymongo
+
