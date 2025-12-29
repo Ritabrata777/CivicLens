@@ -1,0 +1,25 @@
+# Node modules
+node_modules/
+
+# Environment files
+.env
+.env.*
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Next.js build outputs
+.next/
+
+# macOS
+.DS_Store
+
+# VSCode
+.vscode/
+
+# Local sqlite DB files and write-ahead logs
+civic-lens.db*
+
+.vercel

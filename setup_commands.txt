@@ -1,0 +1,50 @@
+# ----------------------------------------------------------------------
+# CIVIC LENS PROJECT SETUP COMMANDS
+# ----------------------------------------------------------------------
+
+# 0. Environment Setup
+# Ensure you have a .env file in the root directory with the following variables:
+# - MONGODB_URI
+# - MONGODB_DB_NAME
+# - NEXT_PUBLIC_ADMIN_WALLETS
+# - PRIVATE_KEY (for blockchain)
+# - AMOY_RPC_URL
+# - GOOGLE_GENAI_API_KEY
+
+# 1. Frontend & Backend (Node.js)
+# Install all JavaScript/TypeScript dependencies listed in package.json
+npm install
+
+# 2. Python Environment & ML Libraries
+# Create a virtual environment
+python -m venv .venv
+
+# Activate the virtual environment (Windows Powershell)
+.\.venv\Scripts\Activate.ps1
+
+# Upgrade pip
+python -m pip install --upgrade pip
+
+# Install required ML libraries using the requirements file
+pip install -r ml/scripts/requirements.txt
+
+# 3. Download ML Models
+# This script downloads the necessary models for duplicate detection and OCR
+python ml/scripts/download_model.py
+
+# 4. Database Setup
+# Seed the initial admin user and ensure MongoDB connection
+node scripts/seed-mongo.cjs
+
+# 5. Start the Application
+npm run dev
+
+# ----------------------------------------------------------------------
+# OTHER USEFUL COMMANDS
+# ----------------------------------------------------------------------
+
+# Deploy Smart Contracts (if needed)
+# npx hardhat run scripts/deploy.js --network amoy
+
+# Run Duplicate ID Check (Manual Test)
+# python ml/scripts/detect_duplicates.py

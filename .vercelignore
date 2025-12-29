@@ -1,0 +1,6 @@
+python_backend/
+ml/
+.venv/
+contracts/
+test/
+hardhat.config.*
