@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+python-multipart
+ultralytics
+easyocr
+opencv-python-headless
+imagehash
+sentence-transformers
+scikit-learn
+Pillow
+numpy
+pymongo
+requests
