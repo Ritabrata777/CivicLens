@@ -19,8 +19,9 @@ import { isUserLoggedIn } from '@/lib/auth-server';
 
 // ... existing imports
 
-export default async function IssueDetailPage({ params }: { params: { id: string } }) {
-  const issue = await getIssueById(params.id);
+export default async function IssueDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const issue = await getIssueById(id);
   if (!issue) {
     notFound();
   }
