@@ -1,0 +1,52 @@
+{
+  "placeholderImages": [
+    {
+      "id": "pothole-1",
+      "description": "A large pothole on a city street",
+      "imageUrl": "https://images.unsplash.com/photo-1730674337922-0bf08006a66a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwyfHxwb3Rob2xlJTIwcm9hZHxlbnwwfHx8fDE3NjUxMzQxMTJ8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "pothole road"
+    },
+    {
+      "id": "streetlight-1",
+      "description": "A malfunctioning streetlight at night",
+      "imageUrl": "https://images.unsplash.com/photo-1436337936912-5be7166b31ae?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw2fHxzdHJlZXQlMjBsaWdodHxlbnwwfHx8fDE3NjUxMjgzODZ8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "street light"
+    },
+    {
+      "id": "drainage-1",
+      "description": "A clogged drainage system causing flooding",
+      "imageUrl": "https://images.unsplash.com/photo-1657069345471-c54f2432b79c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw1fHx3YXRlciUyMGZsb29kfGVufDB8fHx8MTc2NTEzNDExMnww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "water flood"
+    },
+    {
+      "id": "garbage-1",
+      "description": "An overflowing garbage bin on a sidewalk",
+      "imageUrl": "https://images.unsplash.com/photo-1705293299289-385f10568c86?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw2fHxnYXJiYWdlJTIwdHJhc2h8ZW58MHx8fHwxNzY1MTE3OTU1fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "garbage trash"
+    },
+    {
+      "id": "generic-issue-1",
+      "description": "A generic city issue",
+      "imageUrl": "https://images.unsplash.com/photo-1634123431577-d448e438edb4?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw4fHxjaXR5JTIwc3RyZWV0fGVufDB8fHx8MTc2NTA4MDUzMHww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "city street"
+    },
+    {
+      "id": "generic-issue-2",
+      "description": "Another generic city issue",
+      "imageUrl": "https://images.unsplash.com/photo-1548355249-1a3074d8fce1?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw5fHx1cmJhbiUyMHByb2JsZW18ZW58MHx8fHwxNzY1MTM0MTEyfDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "urban problem"
+    },
+    {
+      "id": "user-avatar-1",
+      "description": "User avatar",
+      "imageUrl": "https://images.unsplash.com/photo-1600180758890-6b94519a8ba6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw1fHxwZXJzb24lMjBwb3J0cmFpdHxlbnwwfHx8fDE3NjUwMjYxNTV8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "person portrait"
+    },
+    {
+      "id": "user-avatar-2",
+      "description": "User avatar",
+      "imageUrl": "https://images.unsplash.com/photo-1710974481447-fb001ad9ad5a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwzfHxwZXJzb24lMjBmYWNlfGVufDB8fHx8MTc2NTA1NTEyMnww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "person face"
+    }
+  ]
+}
