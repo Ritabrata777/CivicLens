@@ -70,8 +70,8 @@ We use a sophisticated Python microservice architecture to handle the "senses" o
 
 ### 1. Clone the repo
 ```bash
-git clone https://github.com/Ritabrata777/Civic-Lens
-cd Civic-Lens
+git clone https://github.com/Ritabrata777/CivicLens
+cd CivicLens
 ```
 
 ### 2. Install Dependencies
@@ -94,4 +94,5 @@ npm run dev
 ```
 
 Visit `http://localhost:3000` and start fixing your city! 🏙️
+
 
