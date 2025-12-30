@@ -61,7 +61,7 @@ We use a sophisticated Python microservice architecture to handle the "senses" o
 *   **Moinak Chakraborty**: Back-end, AI/ML
 *   **Ritabrata Majumdar**: Blockchain, Back-end
 *   **Tabassum Molla**: UI/UX, Front-end
-*   **Arnava**: Front-end, Back-end
+*   **Arnava Hazra**: Front-end, Back-end
 *   **Arya Roy**: AI/ML
 
 ---
@@ -94,3 +94,4 @@ npm run dev
 ```
 
 Visit `http://localhost:3000` and start fixing your city! 🏙️
+
