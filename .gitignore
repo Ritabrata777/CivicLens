@@ -22,3 +22,4 @@ yarn-error.log*
 # Local sqlite DB files and write-ahead logs
 civic-lens.db*
 
+.vercel

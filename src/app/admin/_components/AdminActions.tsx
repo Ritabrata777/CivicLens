@@ -1,6 +1,6 @@
 "use client"
 
-import { updateIssueStatusAction } from "@/lib/actions";
+import { updateIssueStatusAction } from "@/server/actions";
 import { IssueStatus } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -24,12 +24,12 @@ export function AdminActions({ issueId, currentStatus }: AdminActionsProps) {
     const handleUpdateStatus = (newStatus: IssueStatus, notes?: string) => {
         startTransition(async () => {
             const result = await updateIssueStatusAction(issueId, newStatus, notes);
-            if(result.success) {
+            if (result.success) {
                 toast({
                     title: "Status Updated",
                     description: result.message,
                 });
-                if(popoverOpen) setPopoverOpen(false);
+                if (popoverOpen) setPopoverOpen(false);
             } else {
                 toast({
                     title: "Error",
@@ -55,7 +55,7 @@ export function AdminActions({ issueId, currentStatus }: AdminActionsProps) {
         'Rejected': { label: 'Reject Issue', variant: 'destructive' },
         'In Progress': { label: 'Update to In Progress', variant: 'default' },
         'Resolved': { label: 'Mark as Resolved', variant: 'default' },
-        'Pending': { label: '', variant: 'default'},
+        'Pending': { label: '', variant: 'default' },
     }
 
     const handleProgressUpdate = () => {
@@ -93,7 +93,7 @@ export function AdminActions({ issueId, currentStatus }: AdminActionsProps) {
                 const config = statusButtonConfig[status];
                 if (!config) return null;
                 return (
-                    <Button 
+                    <Button
                         key={status}
                         className="w-full"
                         variant={config.variant}
@@ -104,8 +104,8 @@ export function AdminActions({ issueId, currentStatus }: AdminActionsProps) {
                     </Button>
                 )
             })}
-             {currentStatus === 'In Progress' && (
-                <Button 
+            {currentStatus === 'In Progress' && (
+                <Button
                     className="w-full bg-green-600 hover:bg-green-700"
                     onClick={() => handleUpdateStatus('Resolved')}
                     disabled={isPending}
@@ -117,7 +117,7 @@ export function AdminActions({ issueId, currentStatus }: AdminActionsProps) {
             {availableActions.length === 0 && currentStatus !== 'Resolved' && currentStatus !== 'Rejected' && (
                 <p className="text-sm text-muted-foreground text-center">No further actions for current status.</p>
             )}
-             {(currentStatus === 'Resolved' || currentStatus === 'Rejected') && (
+            {(currentStatus === 'Resolved' || currentStatus === 'Rejected') && (
                 <p className="text-sm text-muted-foreground text-center font-medium">{`Issue has been ${currentStatus}.`}</p>
             )}
         </div>

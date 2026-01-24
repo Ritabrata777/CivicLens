@@ -4,8 +4,8 @@ import { ShieldCheck, Users, TrendingUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getLeaderboard } from '@/server/data';
 import { LeaderboardReveal } from '@/components/home/LeaderboardReveal';
-import Aurora from '@/frontend/components/Aurora';
-import GradientText from '@/frontend/components/GradientText'
+import Aurora from '@/components/ui/Aurora';
+import CivicLens from '@/components/ui/bodyText-civicLens';
 
 
 const features = [
@@ -32,35 +32,30 @@ export default async function WelcomePage() {
   return (
     <>
       <div className="space-y-20">
-        <section className="text-center relative overflow-hidden py-16 -mx-20 -my-8">
-          {/* Subtle background decoration could go here */}
-          <div className="absolute inset-0 z-0 pointer-events-none">
+        <div className="absolute inset-0 z-0 pointer-events-none">
             <Aurora
               colorStops={["#4F46E5", "#9333EA", "#DB2777"]}
               blend={1.5}
               amplitude={1.2}
               speed={0.8}
             />
-          </div>
-          <div className="container mx-auto px-20 relative z-10 ">
-
-            <div className="flex flex-col items-center justify-center gap-2 mb-6">
-              <GradientText
-                colors={["#40ffaa", "#4079ff", "#40ffaa", "#4079ff", "#02386E"]}
-                animationSpeed={10}
-                showBorder={false}
-                className="custom-class text-7xl md:text-9xl font-bold"
-              >
-                Civic Lens
-              </GradientText>
+        </div>
+        <section className="relative overflow-hidden text-center">
+          
+          <div className="relative z-10 px-4 sm:px-8 lg:px-20 py-16 -mt-12 sm:-mt-16">
+            <div className="flex flex-col items-center justify-center gap-2 mb-6 ">
+              <CivicLens />
               <span className="text-xl md:text-2xl font-light text-muted-foreground uppercase tracking-widest">
                 Empowering Communities
               </span>
             </div>
 
             <p className="max-w-3xl mx-auto mt-6 text-xl md:text-2xl text-muted-foreground leading-relaxed">
-              Welcome to the future of civic engagement. <strong>Civic Lens</strong> is a decentralized platform that bridges the gap between citizens and local authorities.
-              By combining the power of community reporting with blockchain verifiability, we ensure that every voice is heard, every issue is tracked, and real change is delivered.
+              Welcome to the future of civic engagement. <strong>Civic Lens</strong> is a
+              decentralized platform that bridges the gap between citizens and local
+              authorities. By combining the power of community reporting with blockchain
+              verifiability, we ensure that every voice is heard, every issue is tracked,
+              and real change is delivered.
             </p>
 
             <div className="mt-10 flex flex-col items-center gap-6">
@@ -68,6 +63,7 @@ export default async function WelcomePage() {
                 <Button asChild size="lg" className="h-12 px-8 text-lg">
                   <Link href="/issues">Explore the Public Square</Link>
                 </Button>
+
                 <Button asChild size="lg" variant="outline" className="h-12 px-8 text-lg">
                   <Link href="/report">Report an Issue Now</Link>
                 </Button>
@@ -77,6 +73,7 @@ export default async function WelcomePage() {
             </div>
           </div>
         </section>
+
 
         <section className="bg-muted/30 py-16">
           <div className="container mx-auto px-4">
