@@ -11,7 +11,8 @@
     "build": "cross-env NODE_ENV=production next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "backfill:pincodes": "node scripts/backfill-postal-codes.cjs"
   },
   "dependencies": {
     "@genkit-ai/google-genai": "^1.16.1",

@@ -13,6 +13,7 @@ const issueSchema = z.object({
   category: z.enum(issueCategories),
   otherCategory: z.string().optional(),
   location: z.string().min(5, "Location is required"),
+  pincode: z.string().regex(/^\d{6}$/, "Pincode must be 6 digits"),
   isUrgent: z.boolean().optional(),
   image: z.any().optional(),
   lat: z.string().optional(),
@@ -38,6 +39,7 @@ export type FormState = {
     category?: string[];
     otherCategory?: string[];
     location?: string[];
+    pincode?: string[];
     isUrgent?: string[];
     image?: string[];
   };
@@ -52,6 +54,7 @@ export async function createIssueAction(prevState: FormState, formData: FormData
     category: formData.get('category'),
     otherCategory: formData.get('otherCategory') || undefined,
     location: formData.get('location'),
+    pincode: formData.get('pincode'),
     isUrgent: formData.get('isUrgent') === 'on',
     image: formData.get('image'),
     lat: formData.get('lat'),

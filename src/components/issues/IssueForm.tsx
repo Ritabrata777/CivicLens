@@ -27,6 +27,7 @@ const issueSchema = z.object({
   category: z.enum(issueCategories),
   otherCategory: z.string().optional(),
   location: z.string().min(5, "Location is required"),
+  pincode: z.string().regex(/^\d{6}$/, "Pincode must be 6 digits"),
   image: z.any().optional(),
   isUrgent: z.boolean().optional(),
 }).refine(data => {
@@ -76,6 +77,7 @@ export function IssueForm({ isLoggedIn = false }: IssueFormProps) {
       category: "Other",
       otherCategory: "",
       location: "",
+      pincode: "",
       isUrgent: false,
     },
   });
@@ -276,6 +278,27 @@ export function IssueForm({ isLoggedIn = false }: IssueFormProps) {
                   </Button>
                 </div>
                 <FormMessage>{formState.errors?.location}</FormMessage>
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="pincode"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Pincode</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="e.g., 700107"
+                    inputMode="numeric"
+                    maxLength={6}
+                    {...field}
+                    onChange={(event) => field.onChange(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                  />
+                </FormControl>
+                <FormDescription>Use the 6-digit postal code for locality scoring.</FormDescription>
+                <FormMessage>{formState.errors?.pincode}</FormMessage>
               </FormItem>
             )}
           />

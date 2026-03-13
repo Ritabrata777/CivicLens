@@ -8,6 +8,7 @@ export interface IIssue extends Omit<Document, '_id'> {
     category: string;
     status: string;
     location_address?: string;
+    postal_code?: string;
     location_lat?: number;
     location_lng?: number;
     image_url?: string;
@@ -27,6 +28,7 @@ const IssueSchema = new Schema<IIssue>({
     category: { type: String, required: true },
     status: { type: String, default: 'Pending' },
     location_address: { type: String },
+    postal_code: { type: String, index: true },
     location_lat: { type: Number },
     location_lng: { type: Number },
     image_url: { type: String },

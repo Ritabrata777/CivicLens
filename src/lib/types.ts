@@ -29,6 +29,26 @@ export type ResolutionEvidence = {
   timestamp: Date;
 };
 
+export type LocalityIssueCount = {
+  category: string;
+  count: number;
+};
+
+export type LocalityScoreResult = {
+  pincode: string;
+  score: number;
+  grade: string;
+  totalIssues: number;
+  resolvedIssues: number;
+  openIssues: number;
+  urgentIssues: number;
+  issuePenalty: number;
+  momentum: number;
+  localityName: string;
+  summary: string;
+  issueCounts: LocalityIssueCount[];
+};
+
 export type Issue = {
   id: string;
   title: string;
@@ -40,6 +60,7 @@ export type Issue = {
     lng: number;
     address: string;
   };
+  pincode?: string;
   imageUrl: string;
   imageHint: string;
   submittedBy: string; // User ID

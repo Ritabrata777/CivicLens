@@ -1,9 +1,11 @@
 import type { Issue, User, IssueStatus, IssueUpdate, BlockchainTransaction, IssueCategory, ResolutionEvidence } from '@/lib/types';
+import type { LocalityScoreResult } from '@/lib/types';
 import connectToDatabase, { DatabaseConnectionError } from '@/lib/db';
 import UserModel from '@/db/models/User';
 import { Issue as IssueModel, IssueUpdate as IssueUpdateModel, IssueUpvote as IssueUpvoteModel } from '@/db/models/Issue';
 import { BlockchainTransaction as BlockchainTransactionModel, ResolutionEvidence as ResolutionEvidenceModel } from '@/db/models/Transaction';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
+import { buildLocalityScore, extractPincode } from '@/lib/locality-score';
 
 async function withDatabaseReadFallback<T>(operation: string, fallback: T, action: () => Promise<T>): Promise<T> {
   try {
@@ -97,6 +99,7 @@ async function mapIssue(doc: any): Promise<Issue> {
       lng: obj.location_lng,
       address: obj.location_address
     },
+    pincode: obj.postal_code || extractPincode(obj.location_address),
     imageUrl: obj.image_url,
     imageHint: obj.image_hint,
     submittedBy: obj.submitted_by,
@@ -190,7 +193,7 @@ export async function ensureAdminUser(walletAddress: string, name: string): Prom
 // --- WRITE operations ---
 
 export async function addIssue(
-  data: { title: string; description: string; category: IssueCategory, otherCategory?: string, location: string, isUrgent?: boolean, imageUrl?: string, lat?: string, lng?: string, licensePlate?: string, violationType?: string },
+  data: { title: string; description: string; category: IssueCategory, otherCategory?: string, location: string, pincode: string, isUrgent?: boolean, imageUrl?: string, lat?: string, lng?: string, licensePlate?: string, violationType?: string },
   userId: string
 ): Promise<Issue> {
   await ensureDatabaseWriteAccess('addIssue');
@@ -230,6 +233,7 @@ export async function addIssue(
     category: finalCategory,
     status: 'Pending',
     location_address: data.location || "Location not provided",
+    postal_code: data.pincode || extractPincode(data.location),
     location_lat: isNaN(lat) ? null : lat,
     location_lng: isNaN(lng) ? null : lng,
     image_url: data.imageUrl || null,
@@ -404,6 +408,101 @@ export async function getLeaderboard(): Promise<{ user: User; points: number; is
       issuesCount: row.issues_count
     }));
   });
+}
+
+type LocalityLookupIssue = {
+  _id?: string;
+  category?: string | null;
+  status?: string | null;
+  is_urgent?: number | boolean | null;
+  location_address?: string | null;
+  postal_code?: string | null;
+  location_lat?: number | null;
+  location_lng?: number | null;
+};
+
+async function reverseGeocodePincode(lat?: number | null, lng?: number | null) {
+  if (lat == null || lng == null || Number.isNaN(lat) || Number.isNaN(lng)) {
+    return undefined;
+  }
+
+  const apiKey = process.env.NEXT_PUBLIC_MAPTILER_API_KEY;
+  if (!apiKey) {
+    return undefined;
+  }
+
+  try {
+    const response = await fetch(`https://api.maptiler.com/geocoding/${lng},${lat}.json?key=${apiKey}`, {
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      return undefined;
+    }
+
+    const data = await response.json();
+    const features = Array.isArray(data.features) ? data.features : [];
+
+    for (const feature of features) {
+      const candidates = [
+        feature?.place_name,
+        feature?.text,
+        feature?.properties?.postcode,
+        feature?.context?.map((item: any) => item?.text).join(', '),
+      ];
+
+      for (const candidate of candidates) {
+        const pincode = extractPincode(candidate);
+        if (pincode) {
+          return pincode;
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Reverse geocoding for pincode failed:', error);
+  }
+
+  return undefined;
+}
+
+async function resolveIssuePincode(issue: LocalityLookupIssue) {
+  const directPincode = issue.postal_code || extractPincode(issue.location_address);
+  if (directPincode) {
+    return directPincode;
+  }
+
+  const inferredPincode = await reverseGeocodePincode(issue.location_lat, issue.location_lng);
+
+  if (inferredPincode && issue._id) {
+    await IssueModel.updateOne({ _id: issue._id }, { $set: { postal_code: inferredPincode } });
+  }
+
+  return inferredPincode;
+}
+
+export async function getLocalityScoreByPincode(rawPincode: string): Promise<LocalityScoreResult> {
+  const pincode = extractPincode(rawPincode);
+
+  if (!pincode) {
+    throw new Error('Please enter a valid 6-digit pincode.');
+  }
+
+  await ensureDatabaseWriteAccess('getLocalityScoreByPincode');
+
+  const issues = await IssueModel.find({})
+    .select('_id category status is_urgent location_address postal_code location_lat location_lng')
+    .lean();
+
+  const normalizedIssues: LocalityLookupIssue[] = [];
+
+  for (const issue of issues as LocalityLookupIssue[]) {
+    const issuePincode = await resolveIssuePincode(issue);
+    if (issuePincode === pincode) {
+      normalizedIssues.push(issue);
+    }
+  }
+
+  return buildLocalityScore(pincode, normalizedIssues);
 }
 
 export async function addResolutionEvidence(issueId: string, adminId: string, imageUrl: string, notes?: string) {
