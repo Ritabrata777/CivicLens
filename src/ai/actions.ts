@@ -124,10 +124,6 @@ export async function detectDuplicatesAction(issueId: string) {
                 return { matches: [], error: result.error };
             }
 
-            if (apiError instanceof TypeError) {
-                console.warn(`Duplicate detection API at ${pythonApiUrl} is unavailable. Used local Python fallback instead.`);
-            }
-
             return { matches: result.matches || [] };
         } catch (fallbackError: any) {
             console.error("Error in duplicate detection via API:", apiError);

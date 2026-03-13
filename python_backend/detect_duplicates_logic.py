@@ -11,6 +11,7 @@ from pymongo import MongoClient
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 import requests
+import re
 
 logging.basicConfig(level=logging.INFO)
 
@@ -70,6 +71,45 @@ def compare_vectors(vec1, vec2):
     score = cosine_similarity(vec1, vec2)[0][0]
     return max(0.0, score)
 
+UTILITY_KEYWORDS = {
+    "water": ["water", "drinking water", "water supply", "tap", "pipeline", "pipe", "tank", "tanker"],
+    "lpg": ["lpg", "gas", "cylinder", "domestic gas", "gas supply", "bharat gas", "indane", "hp gas"],
+    "electricity": ["electricity", "power", "current", "voltage", "meter", "transformer", "load shedding", "outage"],
+}
+
+def normalize_text(value):
+    return re.sub(r"\s+", " ", (value or "").lower()).strip()
+
+def extract_utility_tags(text):
+    normalized = normalize_text(text)
+    tags = set()
+
+    for tag, keywords in UTILITY_KEYWORDS.items():
+        if any(keyword in normalized for keyword in keywords):
+            tags.add(tag)
+
+    return tags
+
+def normalize_location_token(text):
+    normalized = normalize_text(text)
+    normalized = re.sub(r"[^a-z0-9\s,-]", " ", normalized)
+    return re.sub(r"\s+", " ", normalized).strip()
+
+def get_issue_locality_tokens(issue):
+    tokens = set()
+    postal_code = normalize_text(issue.get('postal_code', ''))
+    location_address = normalize_location_token(issue.get('location_address', ''))
+
+    if postal_code:
+        tokens.add(postal_code)
+
+    for part in re.split(r"[,/-]", location_address):
+        part = part.strip()
+        if len(part) >= 4:
+            tokens.add(part)
+
+    return tokens
+
 def detect_duplicates(mongo_uri, target_issue_id, project_root, db_name=None):
     try:
         client = MongoClient(mongo_uri)
@@ -82,8 +122,15 @@ def detect_duplicates(mongo_uri, target_issue_id, project_root, db_name=None):
     if not target:
         return {"error": "Target issue not found"}
 
-    target_text = (target.get('title', "") or "") + ". " + (target.get('description', "") or "")
+    target_category = normalize_text(target.get('category', ''))
+    target_text = " ".join(filter(None, [
+        target.get('category', ""),
+        target.get('title', ""),
+        target.get('description', "")
+    ]))
     target_vec = get_text_embedding(target_text)
+    target_utility_tags = extract_utility_tags(target_text)
+    target_location_tokens = get_issue_locality_tokens(target)
     
     target_img_phash = None
     target_img_url = target.get('imageUrl') # Mongoose stores it as imageUrl, script had image_url?
@@ -104,10 +151,17 @@ def detect_duplicates(mongo_uri, target_issue_id, project_root, db_name=None):
     results = []
     
     for row in candidates:
-        c_text = (row.get('title', "") or "") + ". " + (row.get('description', "") or "")
+        candidate_category = normalize_text(row.get('category', ''))
+        c_text = " ".join(filter(None, [
+            row.get('category', ""),
+            row.get('title', ""),
+            row.get('description', "")
+        ]))
         c_vec = get_text_embedding(c_text)
         
         score_text = float(compare_vectors(target_vec, c_vec))
+        candidate_utility_tags = extract_utility_tags(c_text)
+        candidate_location_tokens = get_issue_locality_tokens(row)
         
         score_image = 0.0
         c_img_rel = row.get('imageUrl') or row.get('image_url')
@@ -116,14 +170,29 @@ def detect_duplicates(mongo_uri, target_issue_id, project_root, db_name=None):
             c_hash = get_image_phash(c_img_rel)
             score_image = compare_hashes(target_img_phash, c_hash)
 
+        same_category = target_category and candidate_category and target_category == candidate_category
+        both_domestic = target_category == "domestic utilities" and candidate_category == "domestic utilities"
+        shared_utility_tags = target_utility_tags.intersection(candidate_utility_tags)
+        shared_location_tokens = target_location_tokens.intersection(candidate_location_tokens)
+
+        category_boost = 0.08 if same_category else 0.0
+        utility_boost = 0.12 if shared_utility_tags else 0.0
+        location_boost = 0.10 if shared_location_tokens else 0.0
+
         if score_image >= 0.95:
             final_score = score_image
         elif score_text >= 0.90:
             final_score = score_text
+        elif both_domestic:
+            # Domestic utility complaints often describe the same outage with weak images and different wording.
+            final_score = (score_text * 0.82) + category_boost + utility_boost + location_boost
         else:
-            final_score = (score_text * 0.6) + (score_image * 0.4)
+            final_score = (score_text * 0.6) + (score_image * 0.4) + category_boost + utility_boost + location_boost
 
-        if final_score > 0.55:
+        final_score = min(final_score, 1.0)
+        threshold = 0.45 if both_domestic else 0.55
+
+        if final_score > threshold:
             results.append({
                 "id": str(row['_id']), # ID to string
                 "title": row.get('title', ''),
@@ -133,7 +202,9 @@ def detect_duplicates(mongo_uri, target_issue_id, project_root, db_name=None):
                 "match_type": "AI-Semantic",
                 "image_url": row.get('image_url') or row.get('imageUrl') or '',
                 "location_address": row.get('location_address', ''),
-                "postal_code": row.get('postal_code', '')
+                "postal_code": row.get('postal_code', ''),
+                "category": row.get('category', ''),
+                "shared_utilities": sorted(list(shared_utility_tags))
             })
 
     results.sort(key=lambda x: x['score'], reverse=True)

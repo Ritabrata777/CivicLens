@@ -16,8 +16,10 @@ interface DuplicateMatch {
     image_score: number;
     text_score: number;
     image_url: string;
+    category?: string;
     location_address?: string;
     postal_code?: string;
+    shared_utilities?: string[];
 }
 
 export function DuplicateChecker({ issueId }: { issueId: string }) {
@@ -112,6 +114,17 @@ export function DuplicateChecker({ issueId }: { issueId: string }) {
                                 <div className="text-xs text-muted-foreground pt-1">
                                     ID: {match.id}
                                 </div>
+
+                                {match.category ? (
+                                    <div className="flex flex-wrap gap-2 pt-1">
+                                        <Badge variant="outline">{match.category}</Badge>
+                                        {match.shared_utilities?.map((utility) => (
+                                            <Badge key={utility} variant="secondary">
+                                                {utility}
+                                            </Badge>
+                                        ))}
+                                    </div>
+                                ) : null}
 
                                 {(match.location_address || match.postal_code) ? (
                                     <div className="rounded-md border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
