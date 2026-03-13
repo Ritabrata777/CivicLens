@@ -125,6 +125,11 @@ export type LoginFormState = {
     success: boolean;
 }
 
+export type ProfilePhotoFormState = {
+    message: string;
+    success: boolean;
+};
+
 export async function loginUserAction(prevState: LoginFormState, formData: FormData): Promise<LoginFormState> {
     const validatedFields = loginSchema.safeParse(Object.fromEntries(formData.entries()));
 
@@ -159,6 +164,47 @@ export async function loginUserAction(prevState: LoginFormState, formData: FormD
         const message = e instanceof DatabaseConnectionError
             ? `Login unavailable. ${e.message}`
             : "An error occurred";
+        return { message, success: false };
+    }
+}
+
+export async function updateProfilePhotoAction(
+    _prevState: ProfilePhotoFormState,
+    formData: FormData
+): Promise<ProfilePhotoFormState> {
+    try {
+        const cookieStore = await cookies();
+        const sessionToken = cookieStore.get('session_token');
+
+        if (!sessionToken?.value) {
+            return { message: "Please log in first.", success: false };
+        }
+
+        const profilePhoto = formData.get('profilePhoto');
+
+        if (!(profilePhoto instanceof File) || profilePhoto.size === 0) {
+            return { message: "Please choose an image to upload.", success: false };
+        }
+
+        await connectToDatabase();
+
+        const buffer = Buffer.from(await profilePhoto.arrayBuffer());
+        const avatarUrl = `data:${profilePhoto.type || 'image/jpeg'};base64,${buffer.toString('base64')}`;
+
+        await UserModel.updateOne(
+            { _id: sessionToken.value },
+            { $set: { avatar_url: avatarUrl } }
+        );
+
+        revalidatePath('/profile');
+        revalidatePath('/');
+
+        return { message: "Profile photo updated.", success: true };
+    } catch (e) {
+        console.error("Update profile photo error", e);
+        const message = e instanceof DatabaseConnectionError
+            ? `Profile update unavailable. ${e.message}`
+            : "Failed to update profile photo.";
         return { message, success: false };
     }
 }

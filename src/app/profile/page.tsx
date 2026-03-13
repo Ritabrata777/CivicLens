@@ -3,7 +3,8 @@ import { getIssuesByUserId, getUserById } from '@/server/data';
 import { IssueCard } from '@/components/issues/IssueCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ListChecks, CheckSquare, Hourglass, Award, Gift } from 'lucide-react';
+import { ProfilePhotoForm } from '@/components/profile/ProfilePhotoForm';
+import { CheckSquare, Hourglass, Award, Gift, Sparkles } from 'lucide-react';
 
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
@@ -35,14 +36,32 @@ export default async function ProfilePage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center gap-6 bg-card p-6 rounded-lg">
-        <Avatar className="h-24 w-24 border-4 border-primary">
-          <AvatarImage src={user?.avatarUrl} alt={user?.name} data-ai-hint={user?.imageHint} />
-          <AvatarFallback className="text-3xl">{user?.name.charAt(0)}</AvatarFallback>
-        </Avatar>
-        <div>
-          <h1 className="text-3xl font-bold font-headline text-primary">{user?.name}</h1>
-          <p className="text-muted-foreground">{user?.role === 'admin' ? 'Administrator' : 'Community Contributor'}</p>
+      <div className="overflow-hidden rounded-3xl border border-border/60 bg-gradient-to-br from-card via-card to-primary/5 shadow-sm">
+        <div className="flex flex-col gap-6 p-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-5">
+            <div className="relative">
+              <Avatar className="h-24 w-24 border-4 border-background shadow-lg ring-4 ring-primary/15">
+                <AvatarImage src={user?.avatarUrl} alt={user?.name} data-ai-hint={user?.imageHint} />
+                <AvatarFallback className="text-3xl">{user?.name.charAt(0)}</AvatarFallback>
+              </Avatar>
+              <div className="absolute -bottom-2 -right-2 flex items-center gap-1 rounded-full bg-primary px-3 py-1 text-[11px] font-semibold text-primary-foreground shadow-sm">
+                <Sparkles className="h-3 w-3" />
+                Profile
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div>
+                <h1 className="text-3xl font-bold font-headline text-primary">{user?.name}</h1>
+                <p className="text-muted-foreground">{user?.role === 'admin' ? 'Administrator' : 'Community Contributor'}</p>
+              </div>
+              <p className="max-w-xl text-sm text-muted-foreground">
+                Keep your profile photo updated so your reports and community activity feel more personal and trustworthy.
+              </p>
+            </div>
+          </div>
+          <div className="lg:self-start">
+            <ProfilePhotoForm />
+          </div>
         </div>
       </div>
 
