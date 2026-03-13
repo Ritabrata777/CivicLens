@@ -1,6 +1,11 @@
 'use server';
 
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import path from "node:path";
 import { type VerifyVoterIdInput } from "./flows/verify-voter-id-flow";
+
+const execFileAsync = promisify(execFile);
 
 function getPythonApiUrl() {
     const configuredUrl = (process.env.PYTHON_API_URL || "").replace(/\/$/, "");
@@ -13,6 +18,13 @@ function getPythonApiUrl() {
     }
 
     return "";
+}
+
+function getLocalPythonPath() {
+    const root = process.cwd();
+    const windowsPython = path.join(root, '.venv', 'Scripts', 'python.exe');
+    const unixPython = path.join(root, '.venv', 'bin', 'python');
+    return process.platform === 'win32' ? windowsPython : unixPython;
 }
 
 export async function verifyVoterIdAction(input: VerifyVoterIdInput) {
@@ -67,14 +79,13 @@ export async function verifyVoterIdAction(input: VerifyVoterIdInput) {
 
 export async function detectDuplicatesAction(issueId: string) {
     const pythonApiUrl = getPythonApiUrl();
-    if (!pythonApiUrl) {
-        console.warn("[AI] PYTHON_API_URL not set. Skipping duplicate detection.");
-        return { matches: [] };
-    }
+    const mongoUri = process.env.MONGODB_URI || "";
+    const dbName = process.env.MONGODB_DB_NAME || "";
 
     try {
-        const mongoUri = process.env.MONGODB_URI || "";
-        const dbName = process.env.MONGODB_DB_NAME || "";
+        if (!pythonApiUrl) {
+            throw new TypeError("PYTHON_API_URL not set");
+        }
 
         const response = await fetch(`${pythonApiUrl}/detect-duplicates`, {
             method: 'POST',
@@ -99,11 +110,28 @@ export async function detectDuplicatesAction(issueId: string) {
 
     } catch (error: any) {
         console.error("Error in duplicate detection via API:", error);
-        return {
-            matches: [],
-            error: error instanceof TypeError
-                ? `Duplicate detection service is unreachable at ${pythonApiUrl}.`
-                : error.message
-        };
+        try {
+            const pythonPath = getLocalPythonPath();
+            const scriptPath = path.join(process.cwd(), 'python_backend', 'run_duplicate_detection.py');
+            const { stdout } = await execFileAsync(pythonPath, [scriptPath, mongoUri, dbName, issueId], {
+                cwd: process.cwd(),
+                maxBuffer: 10 * 1024 * 1024,
+            });
+
+            const result = JSON.parse(stdout);
+            if (result.error) {
+                return { matches: [], error: result.error };
+            }
+
+            return { matches: result.matches || [] };
+        } catch (fallbackError: any) {
+            console.error("Local duplicate detection fallback failed:", fallbackError);
+            return {
+                matches: [],
+                error: error instanceof TypeError
+                    ? `Duplicate detection service is unreachable at ${pythonApiUrl}, and the local Python fallback also failed.`
+                    : error.message
+            };
+        }
     }
 }

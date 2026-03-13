@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { detectDuplicatesAction } from "@/ai/actions";
-import { Loader2, Copy, AlertTriangle, Check, ExternalLink } from "lucide-react";
+import { Loader2, Copy, AlertTriangle, Check, ExternalLink, MapPin } from "lucide-react";
 import Link from "next/link";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,8 @@ interface DuplicateMatch {
     image_score: number;
     text_score: number;
     image_url: string;
+    location_address?: string;
+    postal_code?: string;
 }
 
 export function DuplicateChecker({ issueId }: { issueId: string }) {
@@ -110,6 +112,19 @@ export function DuplicateChecker({ issueId }: { issueId: string }) {
                                 <div className="text-xs text-muted-foreground pt-1">
                                     ID: {match.id}
                                 </div>
+
+                                {(match.location_address || match.postal_code) ? (
+                                    <div className="rounded-md border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
+                                        <div className="mb-1 flex items-center gap-1 font-medium text-foreground">
+                                            <MapPin className="h-3.5 w-3.5 text-primary" />
+                                            Resident Location
+                                        </div>
+                                        <p>{match.location_address || "Location not available"}</p>
+                                        {match.postal_code ? (
+                                            <p className="mt-1 font-medium">Pincode: {match.postal_code}</p>
+                                        ) : null}
+                                    </div>
+                                ) : null}
                             </div>
                         ))}
                     </div>

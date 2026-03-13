@@ -130,7 +130,10 @@ def detect_duplicates(mongo_uri, target_issue_id, project_root, db_name=None):
                 "score": round(final_score * 100, 1),
                 "image_score": round(score_image * 100, 1),
                 "text_score": round(score_text * 100, 1),
-                "match_type": "AI-Semantic"
+                "match_type": "AI-Semantic",
+                "image_url": row.get('image_url') or row.get('imageUrl') or '',
+                "location_address": row.get('location_address', ''),
+                "postal_code": row.get('postal_code', '')
             })
 
     results.sort(key=lambda x: x['score'], reverse=True)

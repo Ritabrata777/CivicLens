@@ -105,6 +105,7 @@ export function IssueForm({ isLoggedIn = false }: IssueFormProps) {
   }, [formState, toast, router]);
 
   const watchedCategory = form.watch("category");
+  const isDomesticIssue = watchedCategory === 'Domestic Utilities';
 
   const handleGetLocation = () => {
     setIsLocating(true);
@@ -199,7 +200,14 @@ export function IssueForm({ isLoggedIn = false }: IssueFormProps) {
             <FormItem>
               <FormLabel>Issue Title</FormLabel>
               <FormControl>
-                <Input placeholder="e.g., Large pothole on Elm Street" {...field} />
+                <Input
+                  placeholder={
+                    isDomesticIssue
+                      ? "e.g., LPG cylinder not being supplied in Green Residency"
+                      : "e.g., Large pothole on Elm Street"
+                  }
+                  {...field}
+                />
               </FormControl>
               <FormMessage>{formState.errors?.title}</FormMessage>
             </FormItem>
@@ -213,12 +221,26 @@ export function IssueForm({ isLoggedIn = false }: IssueFormProps) {
             <FormItem>
               <FormLabel>Description</FormLabel>
               <FormControl>
-                <Textarea placeholder="Provide details about the issue, its impact, and how long it's been there." {...field} rows={5} />
+                <Textarea
+                  placeholder={
+                    isDomesticIssue
+                      ? "Describe the water, LPG gas, or electricity problem. Add the housing complex or flat name, number of families affected, and how long the disruption has been happening."
+                      : "Provide details about the issue, its impact, and how long it's been there."
+                  }
+                  {...field}
+                  rows={5}
+                />
               </FormControl>
               <FormMessage>{formState.errors?.description}</FormMessage>
             </FormItem>
           )}
         />
+
+        {isDomesticIssue ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Use this category for residential utility problems like water shortage, LPG gas supply issues, electricity outage, meter failure, or blocked utility access in apartments, housing complexes, and flats.
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <FormField

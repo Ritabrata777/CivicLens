@@ -1,7 +1,7 @@
 
 export type IssueStatus = "Pending" | "Seen" | "Accepted" | "In Progress" | "Resolved" | "Rejected";
 
-export const issueCategories = ["Pothole", "Streetlight Failure", "Drainage Issue", "Garbage Dumping", "Traffic Violation", "Other"] as const;
+export const issueCategories = ["Pothole", "Streetlight Failure", "Drainage Issue", "Garbage Dumping", "Traffic Violation", "Domestic Utilities", "Other"] as const;
 export type IssueCategory = typeof issueCategories[number] | string;
 
 export type IssueUpdate = {
