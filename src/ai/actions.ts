@@ -81,6 +81,7 @@ export async function detectDuplicatesAction(issueId: string) {
     const pythonApiUrl = getPythonApiUrl();
     const mongoUri = process.env.MONGODB_URI || "";
     const dbName = process.env.MONGODB_DB_NAME || "";
+    let apiError: any;
 
     try {
         if (!pythonApiUrl) {
@@ -109,7 +110,7 @@ export async function detectDuplicatesAction(issueId: string) {
         return { matches: result.matches || [] };
 
     } catch (error: any) {
-        console.error("Error in duplicate detection via API:", error);
+        apiError = error;
         try {
             const pythonPath = getLocalPythonPath();
             const scriptPath = path.join(process.cwd(), 'python_backend', 'run_duplicate_detection.py');
@@ -123,14 +124,19 @@ export async function detectDuplicatesAction(issueId: string) {
                 return { matches: [], error: result.error };
             }
 
+            if (apiError instanceof TypeError) {
+                console.warn(`Duplicate detection API at ${pythonApiUrl} is unavailable. Used local Python fallback instead.`);
+            }
+
             return { matches: result.matches || [] };
         } catch (fallbackError: any) {
+            console.error("Error in duplicate detection via API:", apiError);
             console.error("Local duplicate detection fallback failed:", fallbackError);
             return {
                 matches: [],
-                error: error instanceof TypeError
+                error: apiError instanceof TypeError
                     ? `Duplicate detection service is unreachable at ${pythonApiUrl}, and the local Python fallback also failed.`
-                    : error.message
+                    : apiError.message
             };
         }
     }
