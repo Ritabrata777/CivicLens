@@ -58,9 +58,9 @@ export function LeaderboardReveal({ entries }: LeaderboardRevealProps) {
     return (
         <Dialog>
             <DialogTrigger asChild>
-                <Button variant="outline" className="gap-2">
-                    <Trophy className="w-4 h-4 text-yellow-600" />
-                    Local Heroes
+                <Button variant="localHeroes" className="gap-6">
+                    <Trophy className="w-4 h-4 text-slate-900" />
+                    Check Civic Score
                 </Button>
             </DialogTrigger>
             <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">

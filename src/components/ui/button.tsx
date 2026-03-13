@@ -55,6 +55,15 @@ const buttonVariants = cva(
           "hover:bg-[position:150%_50%]"
         ),
 
+        localHeroes: cn(
+          "text-slate-950 font-extrabold uppercase tracking-[0.18em]",
+          "border border-amber-200/70",
+          "bg-[linear-gradient(135deg,#FDE047_0%,#F59E0B_40%,#EA580C_100%)]",
+          "shadow-[0_10px_35px_rgba(245,158,11,0.45)]",
+          "hover:brightness-105 hover:shadow-[0_14px_35px_rgba(234,88,12,0.5)] hover:-translate-y-0.5",
+          "active:translate-y-0 active:scale-[0.98]"
+        ),
+
         destructive:
           "bg-destructive text-destructive-foreground hover:bg-destructive/90",
 
