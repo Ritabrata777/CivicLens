@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { AlertTriangle, HeartPulse, Loader2, ShieldAlert, Siren, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { createSOSQuickAlertAction } from "@/server/actions";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -37,14 +38,18 @@ export function SOSModal({ isLoggedIn }: { isLoggedIn?: boolean }) {
     const [open, setOpen] = useState(false);
     const [isPending, startTransition] = useTransition();
     const [activeType, setActiveType] = useState<string | null>(null);
+    const [otherDetails, setOtherDetails] = useState("");
+    const [showOtherComposer, setShowOtherComposer] = useState(false);
 
     useEffect(() => {
         if (!open) {
             setActiveType(null);
+            setOtherDetails("");
+            setShowOtherComposer(false);
         }
     }, [open]);
 
-    const handleSOS = (emergencyType: string) => {
+    const sendSOS = (emergencyType: string, details?: string) => {
         if (!isLoggedIn) {
             toast({
                 title: "Login required",
@@ -111,6 +116,7 @@ export function SOSModal({ isLoggedIn }: { isLoggedIn?: boolean }) {
 
                     const result = await createSOSQuickAlertAction({
                         emergencyType,
+                        details,
                         locationAddress,
                         pincode,
                         lat,
@@ -125,6 +131,8 @@ export function SOSModal({ isLoggedIn }: { isLoggedIn?: boolean }) {
 
                     if (result.success) {
                         setOpen(false);
+                        setOtherDetails("");
+                        setShowOtherComposer(false);
                     }
                 } catch {
                     toast({
@@ -146,6 +154,29 @@ export function SOSModal({ isLoggedIn }: { isLoggedIn?: boolean }) {
         });
     };
 
+    const handleSOS = (emergencyType: string) => {
+        if (emergencyType === "Other Emergency") {
+            setShowOtherComposer(true);
+            return;
+        }
+
+        sendSOS(emergencyType);
+    };
+
+    const handleOtherSend = () => {
+        const cleanedDetails = otherDetails.trim();
+        if (cleanedDetails.length < 5) {
+            toast({
+                title: "Add a short issue note",
+                description: "Please type a few words so helpers know what happened.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        sendSOS("Other Emergency", cleanedDetails);
+    };
+
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
@@ -164,6 +195,48 @@ export function SOSModal({ isLoggedIn }: { isLoggedIn?: boolean }) {
                         <div className="flex items-start gap-3">
                             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
                             <p>Please log in first to send an SOS alert.</p>
+                        </div>
+                    </div>
+                ) : showOtherComposer ? (
+                    <div className="space-y-4">
+                        <div className="rounded-2xl border border-sky-200 bg-sky-50/80 p-4">
+                            <p className="text-sm font-semibold text-sky-800">Describe the SOS issue</p>
+                            <p className="mt-1 text-xs text-sky-700/80">
+                                Type what is happening. We will detect location automatically and alert nearby helpers the same way.
+                            </p>
+                        </div>
+
+                        <Textarea
+                            value={otherDetails}
+                            onChange={(event) => setOtherDetails(event.target.value)}
+                            placeholder="Example: A child is missing near the market, please come quickly..."
+                            className="min-h-32 rounded-2xl border-sky-200 focus-visible:ring-sky-400"
+                            maxLength={240}
+                            disabled={isPending}
+                        />
+
+                        <div className="flex items-center justify-between gap-3">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="rounded-full"
+                                onClick={() => {
+                                    setShowOtherComposer(false);
+                                    setOtherDetails("");
+                                }}
+                                disabled={isPending}
+                            >
+                                Back
+                            </Button>
+                            <Button
+                                type="button"
+                                onClick={handleOtherSend}
+                                disabled={isPending}
+                                className="rounded-full bg-sky-600 text-white hover:bg-sky-700"
+                            >
+                                {isPending && activeType === "Other Emergency" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                Send Other SOS
+                            </Button>
                         </div>
                     </div>
                 ) : (
