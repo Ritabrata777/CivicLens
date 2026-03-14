@@ -36,6 +36,52 @@ export function HeaderActions({ isLoggedIn }: { isLoggedIn?: boolean }) {
     const { toast } = useToast();
     const seenNotificationIds = useRef<Set<string>>(new Set());
     const hasLoadedNotifications = useRef(false);
+    const audioContextRef = useRef<AudioContext | null>(null);
+
+    const playSOSAlertSound = () => {
+        if (typeof window === "undefined") {
+            return;
+        }
+
+        const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (!AudioContextClass) {
+            return;
+        }
+
+        try {
+            const context = audioContextRef.current ?? new AudioContextClass();
+            audioContextRef.current = context;
+
+            if (context.state === "suspended") {
+                void context.resume().catch(() => undefined);
+            }
+
+            const now = context.currentTime;
+            const masterGain = context.createGain();
+            masterGain.gain.setValueAtTime(0.0001, now);
+            masterGain.gain.exponentialRampToValueAtTime(0.12, now + 0.02);
+            masterGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.1);
+            masterGain.connect(context.destination);
+
+            const pulseOne = context.createOscillator();
+            pulseOne.type = "sine";
+            pulseOne.frequency.setValueAtTime(880, now);
+            pulseOne.frequency.exponentialRampToValueAtTime(660, now + 0.35);
+            pulseOne.connect(masterGain);
+            pulseOne.start(now);
+            pulseOne.stop(now + 0.35);
+
+            const pulseTwo = context.createOscillator();
+            pulseTwo.type = "triangle";
+            pulseTwo.frequency.setValueAtTime(988, now + 0.42);
+            pulseTwo.frequency.exponentialRampToValueAtTime(740, now + 0.95);
+            pulseTwo.connect(masterGain);
+            pulseTwo.start(now + 0.42);
+            pulseTwo.stop(now + 0.95);
+        } catch {
+            // Ignore sound failures so notification polling keeps working.
+        }
+    };
 
     // Sync state with prop if it changes (e.g. after router.refresh)
     useEffect(() => {
@@ -61,6 +107,7 @@ export function HeaderActions({ isLoggedIn }: { isLoggedIn?: boolean }) {
                     newNotifications
                         .filter((item: AppNotification) => item.kind === 'sos_alert')
                         .forEach((item: AppNotification) => {
+                            playSOSAlertSound();
                             toast({
                                 title: item.title,
                                 description: item.message,
