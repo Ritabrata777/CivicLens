@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
 import Link from 'next/link';
-import { LayoutDashboard, Settings, LogOut, User } from "lucide-react";
+import { LayoutDashboard, LogOut, Siren, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { adminLogoutAction } from "@/server/actions";
 import { connectWallet, isWalletConnected } from "@/lib/web3";
@@ -83,9 +83,35 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {pathname !== "/admin/login" && (
         <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
           <div className="container flex h-14 items-center justify-between">
-            <div className="flex items-center gap-2 font-semibold">
-              <LayoutDashboard className="h-5 w-5" />
-              <span>Admin Dashboard</span>
+            <div className="flex items-center gap-5">
+              <div className="flex items-center gap-2 font-semibold">
+                <LayoutDashboard className="h-5 w-5" />
+                <span>Admin Dashboard</span>
+              </div>
+
+              <nav className="hidden items-center gap-2 md:flex">
+                <Link
+                  href="/admin/dashboard"
+                  className={`rounded-full px-3 py-1.5 text-sm transition-colors ${
+                    pathname === "/admin/dashboard"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  }`}
+                >
+                  Issues
+                </Link>
+                <Link
+                  href="/admin/sos"
+                  className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-sm transition-colors ${
+                    pathname === "/admin/sos"
+                      ? "bg-red-600 text-white"
+                      : "text-muted-foreground hover:bg-red-50 hover:text-red-700"
+                  }`}
+                >
+                  <Siren className="h-3.5 w-3.5" />
+                  SOS Tracking
+                </Link>
+              </nav>
             </div>
 
             <div className="flex items-center gap-4">
@@ -118,4 +144,3 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     </div>
   );
 }
-

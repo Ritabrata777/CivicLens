@@ -18,7 +18,32 @@ export function SOSAcceptButton({ alertId }: { alertId: string }) {
             type="button"
             onClick={() => {
                 startTransition(async () => {
-                    const result = await acceptSOSAlertAction(alertId);
+                    let helperLocationAddress: string | undefined;
+                    let helperLat: number | undefined;
+                    let helperLng: number | undefined;
+
+                    if (navigator.geolocation) {
+                        try {
+                            const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+                                navigator.geolocation.getCurrentPosition(resolve, reject, {
+                                    enableHighAccuracy: true,
+                                    timeout: 10000,
+                                });
+                            });
+
+                            helperLat = position.coords.latitude;
+                            helperLng = position.coords.longitude;
+                            helperLocationAddress = `${helperLat.toFixed(6)}, ${helperLng.toFixed(6)}`;
+                        } catch {
+                            // If location permission is denied, the accept flow still succeeds.
+                        }
+                    }
+
+                    const result = await acceptSOSAlertAction(alertId, {
+                        helperLocationAddress,
+                        helperLat,
+                        helperLng,
+                    });
                     toast({
                         title: result.success ? "SOS accepted" : "Could not accept SOS",
                         description: result.message,

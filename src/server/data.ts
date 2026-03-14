@@ -656,6 +656,29 @@ export async function createSOSAlert(data: {
   };
 }
 
+async function mapSOSAlertWithUsers(alert: any, userMap: Map<string, any>): Promise<SOSAlertType> {
+  return {
+    id: alert._id,
+    senderId: alert.sender_id,
+    senderName: userMap.get(alert.sender_id)?.name,
+    emergencyType: alert.emergency_type,
+    details: alert.details || undefined,
+    locationAddress: alert.location_address,
+    pincode: alert.postal_code,
+    locationLat: alert.location_lat || undefined,
+    locationLng: alert.location_lng || undefined,
+    status: alert.status as SOSAlertType['status'],
+    createdAt: new Date(alert.created_at),
+    notifiedHeroIds: alert.notified_hero_ids || [],
+    acceptedById: alert.accepted_by_id || undefined,
+    acceptedByName: alert.accepted_by_id ? userMap.get(alert.accepted_by_id)?.name : undefined,
+    acceptedAt: alert.accepted_at ? new Date(alert.accepted_at) : undefined,
+    acceptedHelperLocationAddress: alert.accepted_helper_location_address || undefined,
+    acceptedHelperLocationLat: alert.accepted_helper_location_lat || undefined,
+    acceptedHelperLocationLng: alert.accepted_helper_location_lng || undefined,
+  };
+}
+
 export async function getSOSAlertsForHero(userId: string): Promise<SOSAlertType[]> {
   return withDatabaseReadFallback('getSOSAlertsForHero', [], async () => {
     const alerts = await SOSAlertModel.find({
@@ -678,22 +701,7 @@ export async function getSOSAlertsForHero(userId: string): Promise<SOSAlertType[
     const users = await UserModel.find({ _id: { $in: [...userIds] } }).lean();
     const userMap = new Map(users.map((user: any) => [user._id, user]));
 
-    return alerts.map((alert: any) => ({
-      id: alert._id,
-      senderId: alert.sender_id,
-      emergencyType: alert.emergency_type,
-      details: alert.details || undefined,
-      locationAddress: alert.location_address,
-      pincode: alert.postal_code,
-      locationLat: alert.location_lat || undefined,
-      locationLng: alert.location_lng || undefined,
-      status: alert.status as SOSAlertType['status'],
-      createdAt: new Date(alert.created_at),
-      notifiedHeroIds: alert.notified_hero_ids || [],
-      acceptedById: alert.accepted_by_id || undefined,
-      acceptedByName: alert.accepted_by_id ? userMap.get(alert.accepted_by_id)?.name : undefined,
-      acceptedAt: alert.accepted_at ? new Date(alert.accepted_at) : undefined,
-    }));
+    return Promise.all(alerts.map((alert: any) => mapSOSAlertWithUsers(alert, userMap)));
   });
 }
 
@@ -714,26 +722,15 @@ export async function getSOSAlertsBySender(userId: string): Promise<SOSAlertType
       : [];
     const userMap = new Map(users.map((user: any) => [user._id, user]));
 
-    return alerts.map((alert: any) => ({
-      id: alert._id,
-      senderId: alert.sender_id,
-      emergencyType: alert.emergency_type,
-      details: alert.details || undefined,
-      locationAddress: alert.location_address,
-      pincode: alert.postal_code,
-      locationLat: alert.location_lat || undefined,
-      locationLng: alert.location_lng || undefined,
-      status: alert.status as SOSAlertType['status'],
-      createdAt: new Date(alert.created_at),
-      notifiedHeroIds: alert.notified_hero_ids || [],
-      acceptedById: alert.accepted_by_id || undefined,
-      acceptedByName: alert.accepted_by_id ? userMap.get(alert.accepted_by_id)?.name : undefined,
-      acceptedAt: alert.accepted_at ? new Date(alert.accepted_at) : undefined,
-    }));
+    return Promise.all(alerts.map((alert: any) => mapSOSAlertWithUsers(alert, userMap)));
   });
 }
 
-export async function acceptSOSAlert(alertId: string, userId: string): Promise<SOSAlertType> {
+export async function acceptSOSAlert(
+  alertId: string,
+  userId: string,
+  helperLocation?: { address?: string; lat?: number; lng?: number }
+): Promise<SOSAlertType> {
   await ensureDatabaseWriteAccess('acceptSOSAlert');
 
   const alert = await SOSAlertModel.findOne({
@@ -760,6 +757,15 @@ export async function acceptSOSAlert(alertId: string, userId: string): Promise<S
   alert.status = 'Accepted';
   alert.accepted_by_id = userId;
   alert.accepted_at = new Date();
+  if (helperLocation?.address) {
+    alert.accepted_helper_location_address = helperLocation.address;
+  }
+  if (typeof helperLocation?.lat === 'number') {
+    alert.accepted_helper_location_lat = helperLocation.lat;
+  }
+  if (typeof helperLocation?.lng === 'number') {
+    alert.accepted_helper_location_lng = helperLocation.lng;
+  }
   await Promise.all([
     alert.save(),
     UserModel.updateOne({ _id: userId }, { $inc: { reward_points: SOS_HELP_REWARD_POINTS } }),
@@ -799,7 +805,36 @@ export async function acceptSOSAlert(alertId: string, userId: string): Promise<S
     acceptedById: alert.accepted_by_id || undefined,
     acceptedByName: helper?.name,
     acceptedAt: alert.accepted_at ? new Date(alert.accepted_at) : undefined,
+    acceptedHelperLocationAddress: alert.accepted_helper_location_address || undefined,
+    acceptedHelperLocationLat: alert.accepted_helper_location_lat || undefined,
+    acceptedHelperLocationLng: alert.accepted_helper_location_lng || undefined,
   };
+}
+
+export async function getSOSAlertsForAdmin(): Promise<SOSAlertType[]> {
+  return withDatabaseReadFallback('getSOSAlertsForAdmin', [], async () => {
+    const alerts = await SOSAlertModel.find({})
+      .sort({ created_at: -1 })
+      .limit(40)
+      .lean();
+
+    if (alerts.length === 0) {
+      return [];
+    }
+
+    const userIds = new Set<string>();
+    alerts.forEach((alert: any) => {
+      userIds.add(alert.sender_id);
+      if (alert.accepted_by_id) {
+        userIds.add(alert.accepted_by_id);
+      }
+    });
+
+    const users = await UserModel.find({ _id: { $in: [...userIds] } }).lean();
+    const userMap = new Map(users.map((user: any) => [user._id, user]));
+
+    return Promise.all(alerts.map((alert: any) => mapSOSAlertWithUsers(alert, userMap)));
+  });
 }
 
 async function reverseGeocodePincode(lat?: number | null, lng?: number | null) {

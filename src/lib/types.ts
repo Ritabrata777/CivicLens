@@ -65,6 +65,7 @@ export type AppNotification = {
 export type SOSAlert = {
   id: string;
   senderId: string;
+  senderName?: string;
   emergencyType: string;
   details?: string;
   locationAddress: string;
@@ -77,6 +78,9 @@ export type SOSAlert = {
   acceptedById?: string;
   acceptedByName?: string;
   acceptedAt?: Date;
+  acceptedHelperLocationAddress?: string;
+  acceptedHelperLocationLat?: number;
+  acceptedHelperLocationLng?: number;
   distanceKm?: number;
 };
 

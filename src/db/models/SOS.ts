@@ -13,6 +13,9 @@ export interface ISOSAlert extends Omit<Document, '_id'> {
     notified_hero_ids: string[];
     accepted_by_id?: string;
     accepted_at?: Date;
+    accepted_helper_location_address?: string;
+    accepted_helper_location_lat?: number;
+    accepted_helper_location_lng?: number;
     created_at: Date;
 }
 
@@ -29,6 +32,9 @@ const SOSAlertSchema = new Schema<ISOSAlert>({
     notified_hero_ids: [{ type: String, ref: 'User' }],
     accepted_by_id: { type: String, ref: 'User' },
     accepted_at: { type: Date },
+    accepted_helper_location_address: { type: String },
+    accepted_helper_location_lat: { type: Number },
+    accepted_helper_location_lng: { type: Number },
     created_at: { type: Date, default: Date.now },
 }, { _id: false });
 

@@ -56,6 +56,12 @@ const sosSchema = z.object({
   lng: z.string().optional(),
 });
 
+const sosAcceptSchema = z.object({
+  helperLocationAddress: z.string().min(3).optional(),
+  helperLat: z.string().optional(),
+  helperLng: z.string().optional(),
+});
+
 export type SOSFormState = {
   message: string;
   success: boolean;
@@ -326,6 +332,7 @@ export async function createSOSAlertAction(_prevState: SOSFormState, formData: F
 
     revalidatePath('/');
     revalidatePath('/profile');
+    revalidatePath('/admin/sos');
 
     return {
       success: true,
@@ -365,7 +372,11 @@ export async function createSOSQuickAlertAction(payload: {
   return createSOSAlertAction({ success: false, message: '' }, formData);
 }
 
-export async function acceptSOSAlertAction(alertId: string) {
+export async function acceptSOSAlertAction(alertId: string, payload?: {
+  helperLocationAddress?: string;
+  helperLat?: number;
+  helperLng?: number;
+}) {
   try {
     const cookieStore = await cookies();
     const sessionToken = cookieStore.get('session_token');
@@ -374,9 +385,26 @@ export async function acceptSOSAlertAction(alertId: string) {
       return { success: false, message: 'You must be logged in to accept an SOS alert.' };
     }
 
-    const alert = await acceptSOSAlert(alertId, sessionToken.value);
+    const validatedPayload = sosAcceptSchema.safeParse({
+      helperLocationAddress: payload?.helperLocationAddress,
+      helperLat: payload?.helperLat != null ? String(payload.helperLat) : undefined,
+      helperLng: payload?.helperLng != null ? String(payload.helperLng) : undefined,
+    });
+
+    const alert = await acceptSOSAlert(
+      alertId,
+      sessionToken.value,
+      validatedPayload.success
+        ? {
+            address: validatedPayload.data.helperLocationAddress,
+            lat: validatedPayload.data.helperLat ? parseFloat(validatedPayload.data.helperLat) : undefined,
+            lng: validatedPayload.data.helperLng ? parseFloat(validatedPayload.data.helperLng) : undefined,
+          }
+        : undefined
+    );
     revalidatePath('/profile');
     revalidatePath('/');
+    revalidatePath('/admin/sos');
 
     return {
       success: true,
