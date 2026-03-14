@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Civic Lens",
+    "slug": "civic-lens-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/civic-lens-logo.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/civic-lens-logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#EEF3FB"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/civic-lens-logo.png",
+        "backgroundColor": "#EEF3FB"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
