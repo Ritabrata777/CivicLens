@@ -12,13 +12,33 @@ const SOS_RADIUS_KM = 3;
 const SOS_COOLDOWN_MS = 2 * 60 * 1000;
 const SOS_HELP_REWARD_POINTS = 50;
 
+function isDatabaseUnavailableError(error: unknown) {
+  if (error instanceof DatabaseConnectionError) {
+    return true;
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+
+  return (
+    normalized.includes('mongoserverselectionerror') ||
+    normalized.includes('mongonetworktimeouterror') ||
+    normalized.includes('mongonetworkerror') ||
+    normalized.includes('etimedout') ||
+    normalized.includes('timed out') ||
+    normalized.includes('topology is closed') ||
+    normalized.includes('database unavailable')
+  );
+}
+
 async function withDatabaseReadFallback<T>(operation: string, fallback: T, action: () => Promise<T>): Promise<T> {
   try {
     await connectToDatabase();
     return await action();
   } catch (error) {
-    if (error instanceof DatabaseConnectionError) {
-      console.warn(`[DB] ${operation} unavailable: ${error.message}`);
+    if (isDatabaseUnavailableError(error)) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[DB] ${operation} unavailable: ${message}`);
       return fallback;
     }
 
@@ -30,8 +50,9 @@ async function ensureDatabaseWriteAccess(operation: string) {
   try {
     await connectToDatabase();
   } catch (error) {
-    if (error instanceof DatabaseConnectionError) {
-      throw new Error(`Database unavailable for ${operation}. ${error.message}`);
+    if (isDatabaseUnavailableError(error)) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Database unavailable for ${operation}. ${message}`);
     }
 
     throw error;

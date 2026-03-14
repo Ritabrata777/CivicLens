@@ -30,6 +30,8 @@ function formatConnectionError(error: unknown) {
 interface MongooseCache {
     conn: typeof mongoose | null;
     promise: Promise<typeof mongoose> | null;
+    lastFailureAt?: number;
+    lastFailureMessage?: string;
 }
 
 declare global {
@@ -42,16 +44,29 @@ if (!cached) {
     cached = global.mongoose = { conn: null, promise: null };
 }
 
+const DATABASE_RETRY_COOLDOWN_MS = 15000;
+
 async function connectToDatabase() {
     if (cached!.conn) {
         return cached!.conn;
+    }
+
+    if (
+        cached!.lastFailureAt &&
+        Date.now() - cached!.lastFailureAt < DATABASE_RETRY_COOLDOWN_MS
+    ) {
+        throw new DatabaseConnectionError(
+            cached!.lastFailureMessage || 'Skipping MongoDB reconnect during cooldown window.'
+        );
     }
 
     if (!cached!.promise) {
         const opts = {
             bufferCommands: false,
             dbName: process.env.MONGODB_DB_NAME,
-            serverSelectionTimeoutMS: 10000,
+            serverSelectionTimeoutMS: 3000,
+            connectTimeoutMS: 3000,
+            socketTimeoutMS: 5000,
         };
 
         cached!.promise = mongoose.connect(MONGODB_URI!, opts).then((mongoose) => {
@@ -61,9 +76,14 @@ async function connectToDatabase() {
 
     try {
         cached!.conn = await cached!.promise;
+        cached!.lastFailureAt = undefined;
+        cached!.lastFailureMessage = undefined;
     } catch (e) {
         cached!.promise = null;
-        throw new DatabaseConnectionError(formatConnectionError(e), e);
+        const message = formatConnectionError(e);
+        cached!.lastFailureAt = Date.now();
+        cached!.lastFailureMessage = message;
+        throw new DatabaseConnectionError(message, e);
     }
 
     return cached!.conn;
