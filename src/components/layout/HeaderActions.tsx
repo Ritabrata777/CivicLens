@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { AuthModal } from "@/components/auth/AuthModal";
@@ -10,15 +10,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getNotificationsAction } from "@/server/actions";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
-import { IssueStatus } from "@/lib/types";
+import { AppNotification } from "@/lib/types";
 import { adminLogoutAction } from "@/server/actions";
-
-interface Notification {
-    issueId: string;
-    title: string;
-    status: IssueStatus;
-    timestamp: Date;
-}
 
 interface HeaderActionsProps {
     isLoggedIn: boolean; // We might convert this to use a context or cookie check if needed client-side, 
@@ -36,10 +29,13 @@ export function HeaderActions({ isLoggedIn }: { isLoggedIn?: boolean }) {
     // Let's initialize state from prop.
     const [localIsLoggedIn, setLocalIsLoggedIn] = useState(!!isLoggedIn);
     const [authModalOpen, setAuthModalOpen] = useState(false);
-    const [notifications, setNotifications] = useState<Notification[]>([]);
+    const [notifications, setNotifications] = useState<AppNotification[]>([]);
     const [loadingNotifications, setLoadingNotifications] = useState(false);
     const [notificationsOpen, setNotificationsOpen] = useState(false);
     const router = useRouter();
+    const { toast } = useToast();
+    const seenNotificationIds = useRef<Set<string>>(new Set());
+    const hasLoadedNotifications = useRef(false);
 
     // Sync state with prop if it changes (e.g. after router.refresh)
     useEffect(() => {
@@ -48,22 +44,71 @@ export function HeaderActions({ isLoggedIn }: { isLoggedIn?: boolean }) {
 
     // ... rest of component using localIsLoggedIn
 
-    // Fetch notifications when popover opens
-    // Fetch notifications when popover opens
+    const loadNotifications = (emitLiveAlerts = false) => {
+        setLoadingNotifications(true);
+        getNotificationsAction()
+            .then(data => {
+                const parsed = data.map((n: any) => ({
+                    ...n,
+                    timestamp: new Date(n.timestamp)
+                }));
+
+                const nextSeenIds = new Set(parsed.map((item: AppNotification) => item.id));
+
+                if (emitLiveAlerts && hasLoadedNotifications.current) {
+                    const newNotifications = parsed.filter((item: AppNotification) => !seenNotificationIds.current.has(item.id));
+
+                    newNotifications
+                        .filter((item: AppNotification) => item.kind === 'sos_alert')
+                        .forEach((item: AppNotification) => {
+                            toast({
+                                title: item.title,
+                                description: item.message,
+                            });
+
+                            if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+                                new Notification(item.title, {
+                                    body: item.message,
+                                });
+                            }
+                        });
+                }
+
+                seenNotificationIds.current = nextSeenIds;
+                hasLoadedNotifications.current = true;
+                setNotifications(parsed);
+            })
+            .finally(() => setLoadingNotifications(false));
+    };
+
     useEffect(() => {
         if (localIsLoggedIn && notificationsOpen) {
-            setLoadingNotifications(true);
-            getNotificationsAction()
-                .then(data => {
-                    const parsed = data.map((n: any) => ({
-                        ...n,
-                        timestamp: new Date(n.timestamp)
-                    }));
-                    setNotifications(parsed);
-                })
-                .finally(() => setLoadingNotifications(false));
+            loadNotifications();
         }
     }, [localIsLoggedIn, notificationsOpen]);
+
+    useEffect(() => {
+        if (!localIsLoggedIn) {
+            return;
+        }
+
+        loadNotifications();
+        const intervalId = window.setInterval(() => loadNotifications(true), 10000);
+
+        return () => {
+            window.clearInterval(intervalId);
+        };
+    }, [localIsLoggedIn]);
+
+    useEffect(() => {
+        if (!localIsLoggedIn) {
+            return;
+        }
+
+        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission().catch(() => undefined);
+        }
+    }, [localIsLoggedIn]);
 
 
 
@@ -105,15 +150,18 @@ export function HeaderActions({ isLoggedIn }: { isLoggedIn?: boolean }) {
                                 <div className="divide-y">
                                     {notifications.map((n) => (
                                         <Link
-                                            key={n.issueId + n.timestamp.toISOString()}
-                                            href={`/issues/${n.issueId}`}
+                                            key={n.id + n.timestamp.toISOString()}
+                                            href={n.href}
                                             className="block p-4 hover:bg-muted/50 transition-colors"
                                             onClick={() => setNotificationsOpen(false)}
                                         >
                                             <p className="text-sm font-medium">{n.title}</p>
-                                            <p className="text-xs text-muted-foreground mt-1">
-                                                Status update: <span className="font-semibold text-primary">{n.status}</span>
-                                            </p>
+                                            <p className="text-xs text-muted-foreground mt-1">{n.message}</p>
+                                            {n.status ? (
+                                                <p className="text-xs text-muted-foreground mt-1">
+                                                    Status: <span className="font-semibold text-primary">{n.status}</span>
+                                                </p>
+                                            ) : null}
                                             <p className="text-[10px] text-muted-foreground mt-1 tabular-nums">
                                                 {n.timestamp.toLocaleDateString()}
                                             </p>

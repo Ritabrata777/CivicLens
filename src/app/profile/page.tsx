@@ -1,9 +1,10 @@
 
-import { getIssuesByUserId, getUserById } from '@/server/data';
+import { getIssuesByUserId, getSOSAlertsBySender, getSOSAlertsForHero, getUserById } from '@/server/data';
 import { IssueCard } from '@/components/issues/IssueCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ProfilePhotoForm } from '@/components/profile/ProfilePhotoForm';
+import { SOSDashboard } from '@/components/profile/SOSDashboard';
 import { CheckSquare, Hourglass, Award, Gift, Sparkles } from 'lucide-react';
 
 import { cookies } from 'next/headers';
@@ -14,7 +15,11 @@ import { redirect } from 'next/navigation';
 const POINTS_PER_RESOLUTION = 50;
 const POINTS_TO_MATIC_RATE = 150 / 10; // 150 points = 10 MATIC
 
-export default async function ProfilePage() {
+export default async function ProfilePage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ sos?: string }>;
+}) {
   const cookieStore = await cookies();
   const sessionToken = cookieStore.get('session_token');
 
@@ -23,9 +28,14 @@ export default async function ProfilePage() {
   }
 
   const userId = sessionToken.value;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
 
-  const user = await getUserById(userId);
-  const userIssues = await getIssuesByUserId(userId);
+  const [user, userIssues, helperAlerts, sentAlerts] = await Promise.all([
+    getUserById(userId),
+    getIssuesByUserId(userId),
+    getSOSAlertsForHero(userId),
+    getSOSAlertsBySender(userId),
+  ]);
 
   const totalIssues = userIssues.length;
   const resolvedIssues = userIssues.filter(i => i.status === 'Resolved').length;
@@ -110,6 +120,13 @@ export default async function ProfilePage() {
           </CardContent>
         </Card>
       </div>
+
+      <SOSDashboard
+        helperAlerts={helperAlerts}
+        sentAlerts={sentAlerts}
+        currentUserId={userId}
+        defaultTab={resolvedSearchParams?.sos}
+      />
 
       <div>
         <h2 className="text-2xl font-bold font-headline mb-4">Your Submitted Issues</h2>

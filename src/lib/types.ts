@@ -49,6 +49,37 @@ export type LocalityScoreResult = {
   issueCounts: LocalityIssueCount[];
 };
 
+export type NotificationKind = "issue_update" | "sos_alert" | "sos_sent";
+
+export type AppNotification = {
+  id: string;
+  title: string;
+  message: string;
+  href: string;
+  kind: NotificationKind;
+  timestamp: Date;
+  status?: IssueStatus;
+  relatedSosId?: string;
+};
+
+export type SOSAlert = {
+  id: string;
+  senderId: string;
+  emergencyType: string;
+  details?: string;
+  locationAddress: string;
+  pincode: string;
+  locationLat?: number;
+  locationLng?: number;
+  status: "Active" | "Accepted" | "Resolved";
+  createdAt: Date;
+  notifiedHeroIds: string[];
+  acceptedById?: string;
+  acceptedByName?: string;
+  acceptedAt?: Date;
+  distanceKm?: number;
+};
+
 export type Issue = {
   id: string;
   title: string;

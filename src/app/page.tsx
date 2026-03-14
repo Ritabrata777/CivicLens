@@ -6,6 +6,8 @@ import { getLeaderboard } from '@/server/data';
 import { LeaderboardReveal } from '@/components/home/LeaderboardReveal';
 import Aurora from '@/components/ui/Aurora';
 import CivicLens from '@/components/ui/bodyText-civicLens';
+import { SOSModal } from '@/components/SOSModal';
+import { cookies } from 'next/headers';
 
 
 const features = [
@@ -27,6 +29,8 @@ const features = [
 ];
 
 export default async function WelcomePage() {
+  const cookieStore = await cookies();
+  const isLoggedIn = !!cookieStore.get('session_token')?.value;
   const leaderboardEntries = await getLeaderboard();
 
   return (
@@ -67,6 +71,8 @@ export default async function WelcomePage() {
                 <Button asChild size="lg" variant="outline" className="h-12 px-8 text-lg">
                   <Link href="/report">Report an Issue Now</Link>
                 </Button>
+
+                <SOSModal isLoggedIn={isLoggedIn} />
               </div>
 
               <LeaderboardReveal entries={leaderboardEntries} />

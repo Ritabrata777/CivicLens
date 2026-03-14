@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { z } from "zod";
-import { addIssue, incrementUpvote, updateIssueStatus, getUserById, getUserNotifications, deleteIssue } from "./data";
+import { addIssue, incrementUpvote, updateIssueStatus, getUserById, getUserNotifications, deleteIssue, createSOSAlert, getAppNotifications, acceptSOSAlert } from "./data";
 import type { IssueStatus } from "@/lib/types";
 import { issueCategories } from "@/lib/types";
 import { detectDuplicatesAction } from "@/ai/actions";
@@ -46,6 +46,21 @@ export type FormState = {
   success: boolean;
   issueId?: string;
 }
+
+const sosSchema = z.object({
+  emergencyType: z.string().min(3, "Emergency type is required"),
+  locationAddress: z.string().min(5, "Location is required"),
+  pincode: z.string().regex(/^\d{6}$/, "Pincode must be 6 digits"),
+  details: z.string().max(500).optional(),
+  lat: z.string().optional(),
+  lng: z.string().optional(),
+});
+
+export type SOSFormState = {
+  message: string;
+  success: boolean;
+  notifiedHeroes?: number;
+};
 
 export async function createIssueAction(prevState: FormState, formData: FormData): Promise<FormState> {
   const rawData = {
@@ -269,11 +284,111 @@ export async function getNotificationsAction() {
       return [];
     }
 
-    const notifications = await getUserNotifications(sessionToken.value);
+    const notifications = await getAppNotifications(sessionToken.value);
     return notifications;
   } catch (error) {
     console.error("Failed to fetch notifications:", error);
     return [];
+  }
+}
+
+export async function createSOSAlertAction(_prevState: SOSFormState, formData: FormData): Promise<SOSFormState> {
+  try {
+    const cookieStore = await cookies();
+    const sessionToken = cookieStore.get('session_token');
+
+    if (!sessionToken?.value) {
+      return { success: false, message: 'You must be logged in to send an SOS alert.' };
+    }
+
+    const validatedFields = sosSchema.safeParse({
+      emergencyType: formData.get('emergencyType'),
+      locationAddress: formData.get('locationAddress'),
+      pincode: formData.get('pincode'),
+      details: formData.get('details') || undefined,
+      lat: formData.get('lat') || undefined,
+      lng: formData.get('lng') || undefined,
+    });
+
+    if (!validatedFields.success) {
+      const firstError = Object.values(validatedFields.error.flatten().fieldErrors).flat()[0];
+      return { success: false, message: firstError || 'Please check the SOS details and try again.' };
+    }
+
+    const result = await createSOSAlert({
+      emergencyType: validatedFields.data.emergencyType,
+      details: validatedFields.data.details,
+      locationAddress: validatedFields.data.locationAddress,
+      pincode: validatedFields.data.pincode,
+      lat: validatedFields.data.lat ? parseFloat(validatedFields.data.lat) : undefined,
+      lng: validatedFields.data.lng ? parseFloat(validatedFields.data.lng) : undefined,
+    }, sessionToken.value);
+
+    revalidatePath('/');
+    revalidatePath('/profile');
+
+    return {
+      success: true,
+      message: result.notifiedHeroes.length > 0
+        ? `${result.notifiedHeroes.length} nearby local hero${result.notifiedHeroes.length === 1 ? '' : 'es'} have been notified.`
+        : 'SOS saved. We could not find any nearby local heroes yet.',
+      notifiedHeroes: result.notifiedHeroes.length,
+    };
+  } catch (error) {
+    console.error("Create SOS Alert Error:", error);
+    return { success: false, message: 'Failed to send SOS alert.' };
+  }
+}
+
+export async function createSOSQuickAlertAction(payload: {
+  emergencyType: string;
+  locationAddress: string;
+  pincode: string;
+  details?: string;
+  lat?: number;
+  lng?: number;
+}): Promise<SOSFormState> {
+  const formData = new FormData();
+  formData.set('emergencyType', payload.emergencyType);
+  formData.set('locationAddress', payload.locationAddress);
+  formData.set('pincode', payload.pincode);
+  if (payload.details) {
+    formData.set('details', payload.details);
+  }
+  if (payload.lat != null) {
+    formData.set('lat', String(payload.lat));
+  }
+  if (payload.lng != null) {
+    formData.set('lng', String(payload.lng));
+  }
+
+  return createSOSAlertAction({ success: false, message: '' }, formData);
+}
+
+export async function acceptSOSAlertAction(alertId: string) {
+  try {
+    const cookieStore = await cookies();
+    const sessionToken = cookieStore.get('session_token');
+
+    if (!sessionToken?.value) {
+      return { success: false, message: 'You must be logged in to accept an SOS alert.' };
+    }
+
+    const alert = await acceptSOSAlert(alertId, sessionToken.value);
+    revalidatePath('/profile');
+    revalidatePath('/');
+
+    return {
+      success: true,
+      message: 'You accepted the SOS alert. The sender has been notified.',
+      alert,
+    };
+  } catch (error) {
+    console.error('Accept SOS Alert Error:', error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to accept SOS alert.',
+    };
   }
 }
 

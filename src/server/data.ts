@@ -1,11 +1,15 @@
-import type { Issue, User, IssueStatus, IssueUpdate, BlockchainTransaction, IssueCategory, ResolutionEvidence } from '@/lib/types';
+import type { Issue, User, IssueStatus, IssueUpdate, BlockchainTransaction, IssueCategory, ResolutionEvidence, AppNotification as AppNotificationType, SOSAlert as SOSAlertType } from '@/lib/types';
 import type { LocalityScoreResult } from '@/lib/types';
 import connectToDatabase, { DatabaseConnectionError } from '@/lib/db';
 import UserModel from '@/db/models/User';
 import { Issue as IssueModel, IssueUpdate as IssueUpdateModel, IssueUpvote as IssueUpvoteModel } from '@/db/models/Issue';
 import { BlockchainTransaction as BlockchainTransactionModel, ResolutionEvidence as ResolutionEvidenceModel } from '@/db/models/Transaction';
+import { AppNotification as AppNotificationModel, SOSAlert as SOSAlertModel } from '@/db/models/SOS';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { buildLocalityScore, extractPincode } from '@/lib/locality-score';
+
+const SOS_RADIUS_KM = 3;
+const SOS_COOLDOWN_MS = 2 * 60 * 1000;
 
 async function withDatabaseReadFallback<T>(operation: string, fallback: T, action: () => Promise<T>): Promise<T> {
   try {
@@ -31,6 +35,19 @@ async function ensureDatabaseWriteAccess(operation: string) {
 
     throw error;
   }
+}
+
+function haversineDistanceKm(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const toRadians = (value: number) => (value * Math.PI) / 180;
+  const earthRadiusKm = 6371;
+  const dLat = toRadians(lat2 - lat1);
+  const dLng = toRadians(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+
+  return earthRadiusKm * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
 // Helper to map Mongoose doc to User type
@@ -368,6 +385,39 @@ export async function getUserNotifications(userId: string): Promise<{ issueId: s
   });
 }
 
+export async function getAppNotifications(userId: string): Promise<AppNotificationType[]> {
+  return withDatabaseReadFallback('getAppNotifications', [], async () => {
+    const [issueNotifications, appNotifications] = await Promise.all([
+      getUserNotifications(userId),
+      AppNotificationModel.find({ user_id: userId }).sort({ created_at: -1 }).limit(10).lean(),
+    ]);
+
+    const mappedIssueNotifications: AppNotificationType[] = issueNotifications.map((notification) => ({
+      id: `issue-${notification.issueId}-${notification.timestamp.toISOString()}`,
+      title: notification.title,
+      message: `Status update: ${notification.status}`,
+      href: `/issues/${notification.issueId}`,
+      kind: 'issue_update',
+      timestamp: notification.timestamp,
+      status: notification.status,
+    }));
+
+    const mappedAppNotifications: AppNotificationType[] = appNotifications.map((notification: any) => ({
+      id: notification._id.toString(),
+      title: notification.title,
+      message: notification.message,
+      href: notification.href,
+      kind: notification.kind,
+      timestamp: new Date(notification.created_at),
+      relatedSosId: notification.related_sos_id || undefined,
+    }));
+
+    return [...mappedAppNotifications, ...mappedIssueNotifications]
+      .sort((left, right) => right.timestamp.getTime() - left.timestamp.getTime())
+      .slice(0, 12);
+  });
+}
+
 export async function getLeaderboard(): Promise<{ user: User; points: number; issuesCount: number }[]> {
   return withDatabaseReadFallback('getLeaderboard', [], async () => {
     const result = await UserModel.aggregate([
@@ -419,7 +469,318 @@ type LocalityLookupIssue = {
   postal_code?: string | null;
   location_lat?: number | null;
   location_lng?: number | null;
+  submitted_by?: string | null;
+  upvotes?: number | null;
 };
+
+export async function findNearbyLocalHeroesByPincode(options: {
+  pincode: string;
+  lat?: number;
+  lng?: number;
+  excludeUserId?: string;
+}) {
+  return withDatabaseReadFallback('findNearbyLocalHeroesByPincode', [], async () => {
+    const issues = await IssueModel.find({})
+      .select('_id submitted_by upvotes postal_code location_address location_lat location_lng')
+      .lean();
+
+    const heroMap = new Map<string, { issues_count: number; total_upvotes: number; minDistanceKm?: number }>();
+
+    for (const issue of issues as LocalityLookupIssue[]) {
+      const issuePincode = await resolveIssuePincode(issue);
+      const submittedBy = issue.submitted_by;
+      const issueLat = typeof issue.location_lat === 'number' ? issue.location_lat : undefined;
+      const issueLng = typeof issue.location_lng === 'number' ? issue.location_lng : undefined;
+      const hasCoordinates = typeof options.lat === 'number' && typeof options.lng === 'number' && typeof issueLat === 'number' && typeof issueLng === 'number';
+      const distanceKm = hasCoordinates ? haversineDistanceKm(options.lat!, options.lng!, issueLat!, issueLng!) : undefined;
+      const withinRadius = hasCoordinates && typeof distanceKm === 'number' ? distanceKm <= SOS_RADIUS_KM : false;
+      const samePincode = issuePincode === options.pincode;
+
+      if (!submittedBy || submittedBy === options.excludeUserId) {
+        continue;
+      }
+
+      if (!withinRadius && !samePincode) {
+        continue;
+      }
+
+      const current = heroMap.get(submittedBy) ?? { issues_count: 0, total_upvotes: 0, minDistanceKm: distanceKm };
+      current.issues_count += 1;
+      current.total_upvotes += issue.upvotes ?? 0;
+      if (typeof distanceKm === 'number') {
+        current.minDistanceKm = typeof current.minDistanceKm === 'number'
+          ? Math.min(current.minDistanceKm, distanceKm)
+          : distanceKm;
+      }
+      heroMap.set(submittedBy, current);
+    }
+
+    const rankedHeroes = [...heroMap.entries()]
+      .map(([userId, stats]) => ({
+        _id: userId,
+        issues_count: stats.issues_count,
+        total_upvotes: stats.total_upvotes,
+        minDistanceKm: stats.minDistanceKm,
+      }))
+      .sort((left, right) => {
+        const distanceDelta = (left.minDistanceKm ?? Number.MAX_SAFE_INTEGER) - (right.minDistanceKm ?? Number.MAX_SAFE_INTEGER);
+        if (distanceDelta !== 0) {
+          return distanceDelta;
+        }
+
+        return right.total_upvotes - left.total_upvotes || right.issues_count - left.issues_count;
+      })
+      .slice(0, 5);
+
+    if (rankedHeroes.length === 0) {
+      return [];
+    }
+
+    const users = await UserModel.find({
+      _id: { $in: rankedHeroes.map((row: any) => row._id) },
+      role: { $ne: 'admin' }
+    }).lean();
+
+    const userMap = new Map(users.map((user: any) => [user._id, user]));
+
+    const nearbyHeroes: { user: User; points: number; issuesCount: number; distanceKm?: number }[] = [];
+
+    for (const row of rankedHeroes as any[]) {
+      const user = userMap.get(row._id);
+      if (!user) {
+        continue;
+      }
+
+      nearbyHeroes.push({
+        user: mapUser(user),
+        points: (row.issues_count * 10) + row.total_upvotes,
+        issuesCount: row.issues_count,
+        distanceKm: typeof row.minDistanceKm === 'number' ? row.minDistanceKm : undefined,
+      });
+    }
+
+    return nearbyHeroes;
+  });
+}
+
+export async function createSOSAlert(data: {
+  emergencyType: string;
+  details?: string;
+  locationAddress: string;
+  pincode: string;
+  lat?: number;
+  lng?: number;
+}, userId: string): Promise<{ alert: SOSAlertType; notifiedHeroes: { user: User; points: number; issuesCount: number; distanceKm?: number }[] }> {
+  await ensureDatabaseWriteAccess('createSOSAlert');
+
+  const pincode = extractPincode(data.pincode || data.locationAddress);
+  if (!pincode) {
+    throw new Error('A valid pincode is required for SOS alerts.');
+  }
+
+  const mostRecentAlert = await SOSAlertModel.findOne({ sender_id: userId }).sort({ created_at: -1 }).lean();
+  if (mostRecentAlert && Date.now() - new Date(mostRecentAlert.created_at).getTime() < SOS_COOLDOWN_MS) {
+    throw new Error('Please wait a moment before sending another SOS alert.');
+  }
+
+  const nearbyHeroes = await findNearbyLocalHeroesByPincode({
+    pincode,
+    lat: data.lat,
+    lng: data.lng,
+    excludeUserId: userId,
+  });
+  const alertId = `SOS-${Math.floor(Math.random() * 90000) + 10000}`;
+
+  const alertDoc = await SOSAlertModel.create({
+    _id: alertId,
+    sender_id: userId,
+    emergency_type: data.emergencyType,
+    details: data.details || null,
+    location_address: data.locationAddress,
+    postal_code: pincode,
+    location_lat: data.lat ?? null,
+    location_lng: data.lng ?? null,
+    status: 'Active',
+    notified_hero_ids: nearbyHeroes.map((entry) => entry.user.id),
+    accepted_by_id: null,
+    accepted_at: null,
+  });
+
+  const sender = await getUserById(userId);
+  const senderName = sender?.name || 'A resident';
+  const notifications = nearbyHeroes.map((entry) => ({
+    user_id: entry.user.id,
+    title: `SOS nearby: ${data.emergencyType}`,
+    message: `${senderName} needs help near ${data.locationAddress}.${typeof entry.distanceKm === 'number' ? ` About ${entry.distanceKm.toFixed(1)} km away.` : ''}`,
+    href: '/profile?sos=helpers',
+    kind: 'sos_alert',
+    related_sos_id: alertId,
+  }));
+
+  notifications.push({
+    user_id: userId,
+    title: 'SOS sent successfully',
+    message: nearbyHeroes.length > 0
+      ? `${nearbyHeroes.length} nearby local hero${nearbyHeroes.length === 1 ? '' : 'es'} have been alerted.`
+      : 'Your SOS has been saved, but no nearby local heroes were found yet.',
+    href: '/profile?sos=mine',
+    kind: 'sos_sent',
+    related_sos_id: alertId,
+  });
+
+  if (notifications.length > 0) {
+    await AppNotificationModel.insertMany(notifications);
+  }
+
+  return {
+    alert: {
+      id: alertDoc._id,
+      senderId: alertDoc.sender_id,
+      emergencyType: alertDoc.emergency_type,
+      details: alertDoc.details || undefined,
+      locationAddress: alertDoc.location_address,
+      pincode: alertDoc.postal_code,
+      locationLat: alertDoc.location_lat || undefined,
+      locationLng: alertDoc.location_lng || undefined,
+      status: alertDoc.status as SOSAlertType['status'],
+      createdAt: new Date(alertDoc.created_at),
+      notifiedHeroIds: alertDoc.notified_hero_ids || [],
+      acceptedById: alertDoc.accepted_by_id || undefined,
+      acceptedAt: alertDoc.accepted_at ? new Date(alertDoc.accepted_at) : undefined,
+    },
+    notifiedHeroes: nearbyHeroes,
+  };
+}
+
+export async function getSOSAlertsForHero(userId: string): Promise<SOSAlertType[]> {
+  return withDatabaseReadFallback('getSOSAlertsForHero', [], async () => {
+    const alerts = await SOSAlertModel.find({
+      notified_hero_ids: userId,
+      status: { $in: ['Active', 'Accepted'] },
+    }).sort({ created_at: -1 }).lean();
+
+    if (alerts.length === 0) {
+      return [];
+    }
+
+    const userIds = new Set<string>();
+    alerts.forEach((alert: any) => {
+      userIds.add(alert.sender_id);
+      if (alert.accepted_by_id) {
+        userIds.add(alert.accepted_by_id);
+      }
+    });
+
+    const users = await UserModel.find({ _id: { $in: [...userIds] } }).lean();
+    const userMap = new Map(users.map((user: any) => [user._id, user]));
+
+    return alerts.map((alert: any) => ({
+      id: alert._id,
+      senderId: alert.sender_id,
+      emergencyType: alert.emergency_type,
+      details: alert.details || undefined,
+      locationAddress: alert.location_address,
+      pincode: alert.postal_code,
+      locationLat: alert.location_lat || undefined,
+      locationLng: alert.location_lng || undefined,
+      status: alert.status as SOSAlertType['status'],
+      createdAt: new Date(alert.created_at),
+      notifiedHeroIds: alert.notified_hero_ids || [],
+      acceptedById: alert.accepted_by_id || undefined,
+      acceptedByName: alert.accepted_by_id ? userMap.get(alert.accepted_by_id)?.name : undefined,
+      acceptedAt: alert.accepted_at ? new Date(alert.accepted_at) : undefined,
+    }));
+  });
+}
+
+export async function getSOSAlertsBySender(userId: string): Promise<SOSAlertType[]> {
+  return withDatabaseReadFallback('getSOSAlertsBySender', [], async () => {
+    const alerts = await SOSAlertModel.find({ sender_id: userId }).sort({ created_at: -1 }).limit(10).lean();
+
+    if (alerts.length === 0) {
+      return [];
+    }
+
+    const acceptedIds = alerts
+      .map((alert: any) => alert.accepted_by_id)
+      .filter(Boolean);
+
+    const users = acceptedIds.length > 0
+      ? await UserModel.find({ _id: { $in: acceptedIds } }).lean()
+      : [];
+    const userMap = new Map(users.map((user: any) => [user._id, user]));
+
+    return alerts.map((alert: any) => ({
+      id: alert._id,
+      senderId: alert.sender_id,
+      emergencyType: alert.emergency_type,
+      details: alert.details || undefined,
+      locationAddress: alert.location_address,
+      pincode: alert.postal_code,
+      locationLat: alert.location_lat || undefined,
+      locationLng: alert.location_lng || undefined,
+      status: alert.status as SOSAlertType['status'],
+      createdAt: new Date(alert.created_at),
+      notifiedHeroIds: alert.notified_hero_ids || [],
+      acceptedById: alert.accepted_by_id || undefined,
+      acceptedByName: alert.accepted_by_id ? userMap.get(alert.accepted_by_id)?.name : undefined,
+      acceptedAt: alert.accepted_at ? new Date(alert.accepted_at) : undefined,
+    }));
+  });
+}
+
+export async function acceptSOSAlert(alertId: string, userId: string): Promise<SOSAlertType> {
+  await ensureDatabaseWriteAccess('acceptSOSAlert');
+
+  const alert = await SOSAlertModel.findOne({
+    _id: alertId,
+    notified_hero_ids: userId,
+  });
+
+  if (!alert) {
+    throw new Error('SOS alert not found for this helper.');
+  }
+
+  if (alert.status === 'Resolved') {
+    throw new Error('This SOS alert is already resolved.');
+  }
+
+  if (alert.status === 'Accepted' && alert.accepted_by_id && alert.accepted_by_id !== userId) {
+    throw new Error('Another local hero has already accepted this SOS alert.');
+  }
+
+  alert.status = 'Accepted';
+  alert.accepted_by_id = userId;
+  alert.accepted_at = new Date();
+  await alert.save();
+
+  const helper = await getUserById(userId);
+  await AppNotificationModel.create({
+    user_id: alert.sender_id,
+    title: 'A Local Hero is on the way',
+    message: `${helper?.name || 'A nearby local hero'} accepted your SOS request.`,
+    href: '/profile?sos=mine',
+    kind: 'sos_sent',
+    related_sos_id: alertId,
+  });
+
+  return {
+    id: alert._id,
+    senderId: alert.sender_id,
+    emergencyType: alert.emergency_type,
+    details: alert.details || undefined,
+    locationAddress: alert.location_address,
+    pincode: alert.postal_code,
+    locationLat: alert.location_lat || undefined,
+    locationLng: alert.location_lng || undefined,
+    status: alert.status as SOSAlertType['status'],
+    createdAt: new Date(alert.created_at),
+    notifiedHeroIds: alert.notified_hero_ids || [],
+    acceptedById: alert.accepted_by_id || undefined,
+    acceptedByName: helper?.name,
+    acceptedAt: alert.accepted_at ? new Date(alert.accepted_at) : undefined,
+  };
+}
 
 async function reverseGeocodePincode(lat?: number | null, lng?: number | null) {
   if (lat == null || lng == null || Number.isNaN(lat) || Number.isNaN(lng)) {
