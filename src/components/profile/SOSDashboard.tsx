@@ -1,12 +1,15 @@
 "use client";
 
 import { formatDistanceToNow } from "date-fns";
-import { BellRing, MapPin, ShieldAlert, Siren } from "lucide-react";
+import Link from "next/link";
+import { BellRing, MapPin, Navigation, ShieldAlert, Siren } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { SOSAlert } from "@/lib/types";
 import { SOSAcceptButton } from "@/components/profile/SOSAcceptButton";
+import { buildGoogleMapsUrl } from "@/lib/utils";
 
 type SOSDashboardProps = {
     helperAlerts: SOSAlert[];
@@ -53,7 +56,14 @@ export function SOSDashboard({ helperAlerts, sentAlerts, currentUserId, defaultT
                                 No active SOS alerts are assigned to your area right now.
                             </div>
                         ) : (
-                            helperAlerts.map((alert) => (
+                            helperAlerts.map((alert) => {
+                                const mapsUrl = buildGoogleMapsUrl({
+                                    lat: alert.locationLat,
+                                    lng: alert.locationLng,
+                                    label: alert.locationAddress,
+                                });
+
+                                return (
                                 <div key={alert.id} className="rounded-2xl border bg-card p-4 shadow-sm">
                                     <div className="flex flex-wrap items-start justify-between gap-3">
                                         <div className="space-y-1">
@@ -70,9 +80,19 @@ export function SOSDashboard({ helperAlerts, sentAlerts, currentUserId, defaultT
                                         {alert.status === "Active" ? (
                                             <SOSAcceptButton alertId={alert.id} />
                                         ) : alert.acceptedById === currentUserId ? (
-                                            <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
-                                                You accepted this SOS
-                                            </Badge>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+                                                    You accepted this SOS
+                                                </Badge>
+                                                {mapsUrl ? (
+                                                    <Button asChild size="sm" className="gap-2 rounded-full">
+                                                        <Link href={mapsUrl} target="_blank" rel="noreferrer">
+                                                            <Navigation className="h-4 w-4" />
+                                                            Open in Google Maps
+                                                        </Link>
+                                                    </Button>
+                                                ) : null}
+                                            </div>
                                         ) : (
                                             <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">
                                                 Accepted by {alert.acceptedByName || "another hero"}
@@ -92,9 +112,20 @@ export function SOSDashboard({ helperAlerts, sentAlerts, currentUserId, defaultT
                                         {alert.details ? (
                                             <p className="mt-2 text-sm text-muted-foreground">{alert.details}</p>
                                         ) : null}
+                                        {mapsUrl ? (
+                                            <div className="mt-3">
+                                                <Button asChild variant="outline" size="sm" className="gap-2 rounded-full">
+                                                    <Link href={mapsUrl} target="_blank" rel="noreferrer">
+                                                        <Navigation className="h-4 w-4" />
+                                                        Open location
+                                                    </Link>
+                                                </Button>
+                                            </div>
+                                        ) : null}
                                     </div>
                                 </div>
-                            ))
+                                );
+                            })
                         )}
                     </TabsContent>
 
@@ -104,7 +135,14 @@ export function SOSDashboard({ helperAlerts, sentAlerts, currentUserId, defaultT
                                 You have not sent any SOS alerts yet.
                             </div>
                         ) : (
-                            sentAlerts.map((alert) => (
+                            sentAlerts.map((alert) => {
+                                const mapsUrl = buildGoogleMapsUrl({
+                                    lat: alert.locationLat,
+                                    lng: alert.locationLng,
+                                    label: alert.locationAddress,
+                                });
+
+                                return (
                                 <div key={alert.id} className="rounded-2xl border bg-card p-4 shadow-sm">
                                     <div className="flex flex-wrap items-center justify-between gap-3">
                                         <div>
@@ -139,9 +177,20 @@ export function SOSDashboard({ helperAlerts, sentAlerts, currentUserId, defaultT
                                         {alert.details ? (
                                             <p className="mt-2 text-sm text-muted-foreground">{alert.details}</p>
                                         ) : null}
+                                        {mapsUrl ? (
+                                            <div className="mt-3">
+                                                <Button asChild variant="outline" size="sm" className="gap-2 rounded-full">
+                                                    <Link href={mapsUrl} target="_blank" rel="noreferrer">
+                                                        <Navigation className="h-4 w-4" />
+                                                        Open location
+                                                    </Link>
+                                                </Button>
+                                            </div>
+                                        ) : null}
                                     </div>
                                 </div>
-                            ))
+                                );
+                            })
                         )}
                     </TabsContent>
                 </Tabs>

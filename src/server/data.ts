@@ -10,6 +10,7 @@ import { buildLocalityScore, extractPincode } from '@/lib/locality-score';
 
 const SOS_RADIUS_KM = 3;
 const SOS_COOLDOWN_MS = 2 * 60 * 1000;
+const SOS_HELP_REWARD_POINTS = 50;
 
 async function withDatabaseReadFallback<T>(operation: string, fallback: T, action: () => Promise<T>): Promise<T> {
   try {
@@ -59,6 +60,7 @@ function mapUser(doc: any): User {
     name: obj.name,
     avatarUrl: obj.avatar_url || '',
     imageHint: obj.image_hint || '',
+    rewardPoints: obj.reward_points || 0,
     role: obj.role,
   };
 }
@@ -437,12 +439,13 @@ export async function getLeaderboard(): Promise<{ user: User; points: number; is
           _id: 1,
           name: 1,
           avatar_url: 1,
+          reward_points: { $ifNull: ['$reward_points', 0] },
           role: 1,
           issues_count: { $size: '$issues' },
           total_upvotes: { $sum: '$issues.upvotes' }
         }
       },
-      { $sort: { total_upvotes: -1, issues_count: -1 } },
+      { $sort: { reward_points: -1, total_upvotes: -1, issues_count: -1 } },
       { $limit: 5 }
     ]);
 
@@ -452,9 +455,10 @@ export async function getLeaderboard(): Promise<{ user: User; points: number; is
         name: row.name,
         avatarUrl: row.avatar_url || '',
         imageHint: '',
+        rewardPoints: row.reward_points || 0,
         role: row.role
       },
-      points: (row.issues_count * 10) + row.total_upvotes,
+      points: (row.issues_count * 10) + row.total_upvotes + (row.reward_points || 0),
       issuesCount: row.issues_count
     }));
   });
@@ -553,7 +557,7 @@ export async function findNearbyLocalHeroesByPincode(options: {
 
       nearbyHeroes.push({
         user: mapUser(user),
-        points: (row.issues_count * 10) + row.total_upvotes,
+        points: (row.issues_count * 10) + row.total_upvotes + ((user as any).reward_points || 0),
         issuesCount: row.issues_count,
         distanceKm: typeof row.minDistanceKm === 'number' ? row.minDistanceKm : undefined,
       });
@@ -745,6 +749,10 @@ export async function acceptSOSAlert(alertId: string, userId: string): Promise<S
     throw new Error('This SOS alert is already resolved.');
   }
 
+  if (alert.status === 'Accepted' && alert.accepted_by_id === userId) {
+    throw new Error('You already accepted this SOS alert.');
+  }
+
   if (alert.status === 'Accepted' && alert.accepted_by_id && alert.accepted_by_id !== userId) {
     throw new Error('Another local hero has already accepted this SOS alert.');
   }
@@ -752,7 +760,10 @@ export async function acceptSOSAlert(alertId: string, userId: string): Promise<S
   alert.status = 'Accepted';
   alert.accepted_by_id = userId;
   alert.accepted_at = new Date();
-  await alert.save();
+  await Promise.all([
+    alert.save(),
+    UserModel.updateOne({ _id: userId }, { $inc: { reward_points: SOS_HELP_REWARD_POINTS } }),
+  ]);
 
   const helper = await getUserById(userId);
   await AppNotificationModel.create({
@@ -761,6 +772,15 @@ export async function acceptSOSAlert(alertId: string, userId: string): Promise<S
     message: `${helper?.name || 'A nearby local hero'} accepted your SOS request.`,
     href: '/profile?sos=mine',
     kind: 'sos_sent',
+    related_sos_id: alertId,
+  });
+
+  await AppNotificationModel.create({
+    user_id: userId,
+    title: 'SOS reward earned',
+    message: `You earned ${SOS_HELP_REWARD_POINTS} points for responding to an SOS alert.`,
+    href: '/profile?sos=helpers',
+    kind: 'sos_alert',
     related_sos_id: alertId,
   });
 

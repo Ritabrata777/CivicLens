@@ -14,6 +14,7 @@ import { redirect } from 'next/navigation';
 
 const POINTS_PER_RESOLUTION = 50;
 const POINTS_TO_MATIC_RATE = 150 / 10; // 150 points = 10 MATIC
+const SOS_HELP_REWARD_POINTS = 50;
 
 export default async function ProfilePage({
   searchParams,
@@ -40,8 +41,9 @@ export default async function ProfilePage({
   const totalIssues = userIssues.length;
   const resolvedIssues = userIssues.filter(i => i.status === 'Resolved').length;
   const pendingIssues = totalIssues - resolvedIssues;
-
-  const totalPoints = resolvedIssues * POINTS_PER_RESOLUTION;
+  const sosRewards = user?.rewardPoints || 0;
+  const sosHelpsCount = Math.floor(sosRewards / SOS_HELP_REWARD_POINTS);
+  const totalPoints = (resolvedIssues * POINTS_PER_RESOLUTION) + sosRewards;
   const maticValue = (totalPoints / POINTS_TO_MATIC_RATE).toFixed(2);
 
   return (
@@ -83,7 +85,9 @@ export default async function ProfilePage({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-primary">{totalPoints}</div>
-            <p className="text-xs text-muted-foreground">From {resolvedIssues} resolved issues</p>
+            <p className="text-xs text-muted-foreground">
+              From {resolvedIssues} resolved issues and {sosHelpsCount} SOS help{sosHelpsCount === 1 ? '' : 's'}
+            </p>
           </CardContent>
         </Card>
         <Card className="bg-accent/30 border-accent">

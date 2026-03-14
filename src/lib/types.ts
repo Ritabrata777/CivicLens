@@ -110,5 +110,6 @@ export type User = {
   name: string;
   avatarUrl: string;
   imageHint: string;
+  rewardPoints?: number;
   role?: 'admin' | 'user';
 };

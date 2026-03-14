@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { acceptSOSAlertAction } from "@/server/actions";
+import { buildGoogleMapsUrl } from "@/lib/utils";
 
 export function SOSAcceptButton({ alertId }: { alertId: string }) {
     const router = useRouter();
@@ -25,6 +26,16 @@ export function SOSAcceptButton({ alertId }: { alertId: string }) {
                     });
 
                     if (result.success) {
+                        const mapUrl = buildGoogleMapsUrl({
+                            lat: result.alert?.locationLat,
+                            lng: result.alert?.locationLng,
+                            label: result.alert?.locationAddress,
+                        });
+
+                        if (mapUrl) {
+                            window.open(mapUrl, "_blank", "noopener,noreferrer");
+                        }
+
                         router.refresh();
                     }
                 });

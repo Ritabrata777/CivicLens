@@ -6,6 +6,7 @@ export interface IUser extends Omit<Document, '_id'> {
     password: string;
     name: string;
     avatar_url?: string;
+    reward_points?: number;
     voter_id_front_url?: string;
     voter_id_back_url?: string;
     role: string;
@@ -18,6 +19,7 @@ const UserSchema = new Schema<IUser>({
     password: { type: String, required: true },
     name: { type: String, required: true },
     avatar_url: { type: String },
+    reward_points: { type: Number, default: 0 },
     voter_id_front_url: { type: String },
     voter_id_back_url: { type: String },
     role: { type: String, default: 'user' },
