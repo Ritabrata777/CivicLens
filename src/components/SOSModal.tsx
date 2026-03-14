@@ -185,7 +185,7 @@ export function SOSModal({ isLoggedIn }: { isLoggedIn?: boolean }) {
                     SOS Emergency
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className="sm:max-w-2xl">
                 <DialogHeader>
                     <DialogTitle className="text-center text-xl text-red-700">SOS</DialogTitle>
                 </DialogHeader>
@@ -253,19 +253,21 @@ export function SOSModal({ isLoggedIn }: { isLoggedIn?: boolean }) {
                                     onClick={() => handleSOS(item.value)}
                                     disabled={isPending}
                                     className={cn(
-                                        "group h-auto min-h-40 flex-col items-center justify-center gap-4 rounded-[2rem] border-2 px-4 py-6 text-center text-base font-semibold shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-lg",
+                                        "group h-auto min-h-[13.5rem] flex-col items-center justify-between gap-5 rounded-[2rem] border-2 px-5 py-7 text-center shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-lg",
                                         item.className
                                     )}
                                 >
                                     <div className={cn(
-                                        "flex h-16 w-16 items-center justify-center rounded-full transition-transform duration-200 group-hover:scale-105",
+                                        "flex h-16 w-16 shrink-0 items-center justify-center rounded-full transition-transform duration-200 group-hover:scale-105",
                                         item.ringClassName
                                     )}>
                                         {isLoading ? <Loader2 className="h-7 w-7 animate-spin" /> : <Icon className="h-7 w-7" />}
                                     </div>
-                                    <div className="space-y-1">
-                                        <div className="text-lg font-bold">{item.label}</div>
-                                        <div className="text-xs font-medium opacity-75">Tap to alert nearby helpers</div>
+                                    <div className="flex min-h-[4.5rem] flex-col items-center justify-center space-y-1">
+                                        <div className="text-2xl font-bold leading-none">{item.label}</div>
+                                        <div className="max-w-[9rem] text-center text-[0.78rem] font-medium leading-4 opacity-75">
+                                            Tap to alert nearby helpers
+                                        </div>
                                     </div>
                                 </Button>
                             );

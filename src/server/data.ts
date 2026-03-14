@@ -588,6 +588,62 @@ export async function findNearbyLocalHeroesByPincode(options: {
   });
 }
 
+async function findFallbackSOSHeroes(excludeUserId?: string) {
+  return withDatabaseReadFallback('findFallbackSOSHeroes', [], async () => {
+    const result = await UserModel.aggregate([
+      {
+        $match: {
+          role: { $ne: 'admin' },
+          ...(excludeUserId ? { _id: { $ne: excludeUserId } } : {}),
+        }
+      },
+      {
+        $lookup: {
+          from: 'issues',
+          localField: '_id',
+          foreignField: 'submitted_by',
+          as: 'issues'
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          name: 1,
+          avatar_url: 1,
+          role: 1,
+          reward_points: { $ifNull: ['$reward_points', 0] },
+          issues_count: { $size: '$issues' },
+          total_upvotes: { $sum: '$issues.upvotes' }
+        }
+      },
+      {
+        $match: {
+          $or: [
+            { issues_count: { $gt: 0 } },
+            { reward_points: { $gt: 0 } },
+          ]
+        }
+      },
+      { $sort: { reward_points: -1, total_upvotes: -1, issues_count: -1 } },
+      { $limit: 5 }
+    ]);
+
+    return result.map((row: any) => ({
+      user: {
+        id: row._id,
+        name: row.name,
+        avatarUrl: row.avatar_url || '',
+        imageHint: '',
+        rewardPoints: row.reward_points || 0,
+        role: row.role
+      },
+      points: (row.issues_count * 10) + row.total_upvotes + (row.reward_points || 0),
+      issuesCount: row.issues_count,
+      distanceKm: undefined,
+    }));
+  });
+}
+
 export async function createSOSAlert(data: {
   emergencyType: string;
   details?: string;
@@ -608,12 +664,16 @@ export async function createSOSAlert(data: {
     throw new Error('Please wait a moment before sending another SOS alert.');
   }
 
-  const nearbyHeroes = await findNearbyLocalHeroesByPincode({
+  let nearbyHeroes = await findNearbyLocalHeroesByPincode({
     pincode,
     lat: data.lat,
     lng: data.lng,
     excludeUserId: userId,
   });
+
+  if (nearbyHeroes.length === 0) {
+    nearbyHeroes = await findFallbackSOSHeroes(userId);
+  }
   const alertId = `SOS-${Math.floor(Math.random() * 90000) + 10000}`;
 
   const alertDoc = await SOSAlertModel.create({
