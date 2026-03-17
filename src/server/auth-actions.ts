@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import connectToDatabase, { DatabaseConnectionError } from "@/lib/db";
 import UserModel from "@/db/models/User";
+import { ethers } from "ethers";
 
 const registrationSchema = z.object({
     name: z.string().min(2, "Name is required"),
@@ -51,6 +52,9 @@ export async function createUserAction(prevState: RegistrationFormState, formDat
     try {
         await connectToDatabase();
         const { email, password, name, walletAddress } = validatedFields.data;
+        const normalizedWalletAddress = walletAddress
+            ? ethers.getAddress(walletAddress.trim())
+            : undefined;
 
         // Check if user already exists
         const existing = await UserModel.findOne({ email });
@@ -89,6 +93,7 @@ export async function createUserAction(prevState: RegistrationFormState, formDat
             password,
             name,
             avatar_url: avatarUrl,
+            wallet_address: normalizedWalletAddress,
             voter_id_front_url: idFrontUrl,
             voter_id_back_url: idBackUrl,
             role: 'user'

@@ -5,6 +5,16 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: process.cwd(),
   },
+  webpack: (config) => {
+    config.resolve ??= {};
+    config.resolve.alias = {
+      ...(config.resolve.alias ?? {}),
+      '@genkit-ai/firebase': false,
+      '@opentelemetry/exporter-jaeger': false,
+    };
+
+    return config;
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: '10mb',

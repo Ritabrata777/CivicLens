@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { z } from "zod";
-import { addIssue, incrementUpvote, updateIssueStatus, getUserById, getUserNotifications, deleteIssue, createSOSAlert, getAppNotifications, acceptSOSAlert } from "./data";
+import { ethers } from "ethers";
+import { addIssue, incrementUpvote, updateIssueStatus, getUserById, getUserNotifications, deleteIssue, createSOSAlert, getAppNotifications, acceptSOSAlert, resolveSOSAlert, createRewardClaim, getRewardClaimById, getRewardClaimSummary, markRewardClaimPaid, rejectRewardClaim, updateUserWalletAddress } from "./data";
 import type { IssueStatus } from "@/lib/types";
 import { issueCategories } from "@/lib/types";
 import { detectDuplicatesAction } from "@/ai/actions";
@@ -55,7 +56,7 @@ const sosSchema = z.object({
   lat: z.string().optional(),
   lng: z.string().optional(),
 });
-
+  
 const sosAcceptSchema = z.object({
   helperLocationAddress: z.string().min(3).optional(),
   helperLat: z.string().optional(),
@@ -342,8 +343,11 @@ export async function createSOSAlertAction(_prevState: SOSFormState, formData: F
       notifiedHeroes: result.notifiedHeroes.length,
     };
   } catch (error) {
-    console.error("Create SOS Alert Error:", error);
-    return { success: false, message: 'Failed to send SOS alert.' };
+    const message = error instanceof Error ? error.message : 'Failed to send SOS alert.';
+    if (!message.toLowerCase().includes('please wait')) {
+      console.error("Create SOS Alert Error:", error);
+    }
+    return { success: false, message };
   }
 }
 
@@ -416,6 +420,40 @@ export async function acceptSOSAlertAction(alertId: string, payload?: {
     return {
       success: false,
       message: error instanceof Error ? error.message : 'Failed to accept SOS alert.',
+    };
+  }
+}
+
+export async function resolveSOSAlertAction(alertId: string) {
+  try {
+    const cookieStore = await cookies();
+    const sessionToken = cookieStore.get('session_token');
+
+    if (!sessionToken?.value) {
+      return { success: false, message: 'Unauthorized: You must be logged in.' };
+    }
+
+    const adminUser = await getUserById(sessionToken.value);
+    if (!adminUser || adminUser.role !== 'admin') {
+      return { success: false, message: 'Unauthorized: Admin access required.' };
+    }
+
+    const alert = await resolveSOSAlert(alertId, adminUser.id);
+
+    revalidatePath('/admin/sos');
+    revalidatePath('/profile');
+    revalidatePath('/');
+
+    return {
+      success: true,
+      message: 'SOS incident marked as resolved.',
+      alert,
+    };
+  } catch (error) {
+    console.error('Resolve SOS Alert Error:', error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to resolve SOS alert.',
     };
   }
 }
@@ -532,5 +570,199 @@ export async function adminLogoutAction() {
   cookieStore.delete('session_token');
   revalidatePath('/');
   return { success: true };
+}
+
+function getRewardTreasuryWallet() {
+  const rpcUrl = process.env.AMOY_RPC_URL?.trim() || process.env.NEXT_PUBLIC_AMOY_RPC_URL?.trim();
+  const privateKey = process.env.PRIVATE_KEY?.trim();
+  const configuredAddress = process.env.REWARD_PAYOUT_WALLET?.trim() || "0x07e28def8DC590A442790c80Fd6A3A5240Df0184";
+
+  if (!rpcUrl) {
+    throw new Error("Reward payout RPC URL is not configured.");
+  }
+
+  if (!privateKey) {
+    throw new Error("Reward payout private key is not configured.");
+  }
+
+  const normalizedPrivateKey = privateKey.startsWith("0x") ? privateKey : `0x${privateKey}`;
+  const provider = new ethers.JsonRpcProvider(rpcUrl);
+  const wallet = new ethers.Wallet(normalizedPrivateKey, provider);
+
+  if (configuredAddress && wallet.address.toLowerCase() !== configuredAddress.toLowerCase()) {
+    throw new Error(`Configured payout wallet mismatch. Expected ${configuredAddress} but loaded ${wallet.address}.`);
+  }
+
+  return wallet;
+}
+
+export async function saveRewardWalletAction(walletAddress: string) {
+  try {
+    const cookieStore = await cookies();
+    const sessionToken = cookieStore.get('session_token');
+
+    if (!sessionToken?.value) {
+      return { success: false, message: 'You must be logged in to save a payout wallet.' };
+    }
+
+    const normalizedWalletAddress = ethers.getAddress(walletAddress.trim());
+    const updatedUser = await updateUserWalletAddress(sessionToken.value, normalizedWalletAddress);
+
+    revalidatePath('/profile');
+
+    return {
+      success: true,
+      message: 'Payout wallet saved successfully.',
+      walletAddress: updatedUser?.walletAddress || normalizedWalletAddress,
+    };
+  } catch (error) {
+    console.error('Save Reward Wallet Error:', error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to save payout wallet.',
+    };
+  }
+}
+
+export async function requestRewardClaimAction() {
+  try {
+    const cookieStore = await cookies();
+    const sessionToken = cookieStore.get('session_token');
+
+    if (!sessionToken?.value) {
+      return { success: false, message: 'You must be logged in to claim rewards.' };
+    }
+
+    const user = await getUserById(sessionToken.value);
+    if (!user || user.role === 'admin') {
+      return { success: false, message: 'Only community members can claim rewards.' };
+    }
+
+    const summary = await getRewardClaimSummary(user.id);
+    if (!summary.walletAddress) {
+      return { success: false, message: 'Please save your payout wallet before claiming rewards.' };
+    }
+
+    if (summary.hasPendingClaim) {
+      return { success: false, message: 'You already have a reward claim waiting for admin approval.' };
+    }
+
+    if (summary.claimUnits < 1 || summary.claimablePoints < 150) {
+      return { success: false, message: 'You need at least 150 available points to create a reward claim.' };
+    }
+
+    const claim = await createRewardClaim({
+      userId: user.id,
+      walletAddress: summary.walletAddress,
+      claimUnits: summary.claimUnits,
+      pointsRedeemed: summary.claimablePoints,
+      maticAmount: summary.maticAmount,
+    });
+
+    revalidatePath('/profile');
+    revalidatePath('/admin/rewards');
+
+    return {
+      success: true,
+      message: `Claim submitted for ${claim.maticAmount} MATIC. An admin will review it shortly.`,
+      claimId: claim.id,
+    };
+  } catch (error) {
+    console.error('Request Reward Claim Error:', error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to submit reward claim.',
+    };
+  }
+}
+
+export async function approveRewardClaimAction(claimId: string, note?: string) {
+  try {
+    const cookieStore = await cookies();
+    const sessionToken = cookieStore.get('session_token');
+
+    if (!sessionToken?.value) {
+      return { success: false, message: 'Unauthorized: You must be logged in.' };
+    }
+
+    const adminUser = await getUserById(sessionToken.value);
+    if (!adminUser || adminUser.role !== 'admin') {
+      return { success: false, message: 'Unauthorized: Admin access required.' };
+    }
+
+    const claim = await getRewardClaimById(claimId);
+    if (!claim) {
+      return { success: false, message: 'Reward claim not found.' };
+    }
+
+    if (claim.status !== 'Pending') {
+      return { success: false, message: `This reward claim is already ${claim.status.toLowerCase()}.` };
+    }
+
+    const treasuryWallet = getRewardTreasuryWallet();
+    const tx = await treasuryWallet.sendTransaction({
+      to: ethers.getAddress(claim.walletAddress),
+      value: ethers.parseEther(String(claim.maticAmount)),
+    });
+    await tx.wait();
+
+    const updatedClaim = await markRewardClaimPaid({
+      claimId,
+      adminId: adminUser.id,
+      txHash: tx.hash,
+      payoutFromAddress: treasuryWallet.address,
+      note,
+    });
+
+    revalidatePath('/profile');
+    revalidatePath('/admin/rewards');
+
+    return {
+      success: true,
+      message: `${claim.maticAmount} MATIC sent to ${claim.walletAddress}.`,
+      txHash: updatedClaim?.txHash || tx.hash,
+    };
+  } catch (error) {
+    console.error('Approve Reward Claim Error:', error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to approve and pay reward claim.',
+    };
+  }
+}
+
+export async function rejectRewardClaimAction(claimId: string, note?: string) {
+  try {
+    const cookieStore = await cookies();
+    const sessionToken = cookieStore.get('session_token');
+
+    if (!sessionToken?.value) {
+      return { success: false, message: 'Unauthorized: You must be logged in.' };
+    }
+
+    const adminUser = await getUserById(sessionToken.value);
+    if (!adminUser || adminUser.role !== 'admin') {
+      return { success: false, message: 'Unauthorized: Admin access required.' };
+    }
+
+    const updatedClaim = await rejectRewardClaim(claimId, adminUser.id, note?.trim() || undefined);
+    if (!updatedClaim) {
+      return { success: false, message: 'Reward claim not found.' };
+    }
+
+    revalidatePath('/profile');
+    revalidatePath('/admin/rewards');
+
+    return {
+      success: true,
+      message: 'Reward claim rejected.',
+    };
+  } catch (error) {
+    console.error('Reject Reward Claim Error:', error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to reject reward claim.',
+    };
+  }
 }
 

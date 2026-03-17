@@ -167,7 +167,11 @@ export function SOSDashboard({ helperAlerts, sentAlerts, currentUserId, defaultT
                                             {alert.locationAddress}
                                         </div>
                                         <p className="mt-1 text-xs text-muted-foreground">Pincode: {alert.pincode}</p>
-                                        {alert.acceptedByName ? (
+                                        {alert.status === "Resolved" ? (
+                                            <p className="mt-2 text-sm text-emerald-700">
+                                                This SOS incident has been marked as resolved.
+                                            </p>
+                                        ) : alert.acceptedByName ? (
                                             <p className="mt-2 text-sm text-emerald-700">
                                                 {alert.acceptedByName} is on the way.
                                             </p>

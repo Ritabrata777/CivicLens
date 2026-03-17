@@ -12,7 +12,7 @@ const buttonVariants = cva(
     "[&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
 
     // ultra-smooth motion
-    "transition-[transform,box-shadow,background-position] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
+    "transition-[transform,box-shadow,background-position] duration-500 ease-civic-smooth"
   ),
   {
     variants: {

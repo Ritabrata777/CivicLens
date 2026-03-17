@@ -1,15 +1,17 @@
-import type { Issue, User, IssueStatus, IssueUpdate, BlockchainTransaction, IssueCategory, ResolutionEvidence, AppNotification as AppNotificationType, SOSAlert as SOSAlertType } from '@/lib/types';
+import type { Issue, User, IssueStatus, IssueUpdate, BlockchainTransaction, IssueCategory, ResolutionEvidence, AppNotification as AppNotificationType, RewardClaim as RewardClaimType, SOSAlert as SOSAlertType } from '@/lib/types';
 import type { LocalityScoreResult } from '@/lib/types';
 import connectToDatabase, { DatabaseConnectionError } from '@/lib/db';
 import UserModel from '@/db/models/User';
 import { Issue as IssueModel, IssueUpdate as IssueUpdateModel, IssueUpvote as IssueUpvoteModel } from '@/db/models/Issue';
 import { BlockchainTransaction as BlockchainTransactionModel, ResolutionEvidence as ResolutionEvidenceModel } from '@/db/models/Transaction';
 import { AppNotification as AppNotificationModel, SOSAlert as SOSAlertModel } from '@/db/models/SOS';
+import { RewardClaim as RewardClaimModel } from '@/db/models/Reward';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { buildLocalityScore, extractPincode } from '@/lib/locality-score';
+import { calculateClaimableReward, calculateCommunityPoints } from '@/lib/rewards';
 
 const SOS_RADIUS_KM = 3;
-const SOS_COOLDOWN_MS = 2 * 60 * 1000;
+const SOS_COOLDOWN_MS = 30 * 1000;
 const SOS_HELP_REWARD_POINTS = 50;
 
 function isDatabaseUnavailableError(error: unknown) {
@@ -81,8 +83,33 @@ function mapUser(doc: any): User {
     name: obj.name,
     avatarUrl: obj.avatar_url || '',
     imageHint: obj.image_hint || '',
+    walletAddress: obj.wallet_address || undefined,
     rewardPoints: obj.reward_points || 0,
     role: obj.role,
+  };
+}
+
+function mapRewardClaim(doc: any, userMap?: Map<string, any>): RewardClaimType {
+  const obj = doc.toObject ? doc.toObject() : doc;
+  const user = userMap?.get(obj.user_id);
+  const reviewer = obj.reviewed_by_id ? userMap?.get(obj.reviewed_by_id) : undefined;
+
+  return {
+    id: obj._id,
+    userId: obj.user_id,
+    userName: user?.name,
+    walletAddress: obj.wallet_address,
+    claimUnits: obj.claim_units,
+    pointsRedeemed: obj.points_redeemed,
+    maticAmount: obj.matic_amount,
+    status: obj.status,
+    requestedAt: new Date(obj.requested_at),
+    reviewedAt: obj.reviewed_at ? new Date(obj.reviewed_at) : undefined,
+    reviewedById: obj.reviewed_by_id || undefined,
+    reviewedByName: reviewer?.name,
+    txHash: obj.tx_hash || undefined,
+    payoutFromAddress: obj.payout_from_address || undefined,
+    note: obj.note || undefined,
   };
 }
 
@@ -182,6 +209,16 @@ export async function getUserById(id: string): Promise<User | undefined> {
     const doc = await UserModel.findOne({ _id: id });
     return doc ? mapUser(doc) : undefined;
   });
+}
+
+export async function updateUserWalletAddress(userId: string, walletAddress: string): Promise<User | undefined> {
+  await ensureDatabaseWriteAccess('updateUserWalletAddress');
+  await UserModel.updateOne(
+    { _id: userId },
+    { $set: { wallet_address: walletAddress } }
+  );
+
+  return getUserById(userId);
 }
 
 export async function getUserByEmail(email: string): Promise<any | undefined> {
@@ -441,6 +478,213 @@ export async function getAppNotifications(userId: string): Promise<AppNotificati
   });
 }
 
+export async function getRewardClaimSummary(userId: string) {
+  return withDatabaseReadFallback('getRewardClaimSummary', {
+    totalPoints: 0,
+    reservedPoints: 0,
+    availablePoints: 0,
+    claimUnits: 0,
+    claimablePoints: 0,
+    maticAmount: 0,
+    pointsUntilNextClaim: 150,
+    hasPendingClaim: false,
+    walletAddress: undefined as string | undefined,
+  }, async () => {
+    const [userDoc, resolvedIssues, reservedClaims] = await Promise.all([
+      UserModel.findOne({ _id: userId }).select('_id reward_points wallet_address').lean(),
+      IssueModel.countDocuments({ submitted_by: userId, status: 'Resolved' }),
+      RewardClaimModel.find({
+        user_id: userId,
+        status: { $in: ['Pending', 'Paid'] },
+      }).select('points_redeemed status').lean(),
+    ]);
+
+    const totalPoints = calculateCommunityPoints(resolvedIssues, userDoc?.reward_points || 0);
+    const reservedPoints = reservedClaims.reduce((sum: number, claim: any) => sum + (claim.points_redeemed || 0), 0);
+    const claimState = calculateClaimableReward(totalPoints, reservedPoints);
+    const hasPendingClaim = reservedClaims.some((claim: any) => claim.status === 'Pending');
+
+    return {
+      totalPoints,
+      reservedPoints,
+      ...claimState,
+      hasPendingClaim,
+      walletAddress: userDoc?.wallet_address || undefined,
+    };
+  });
+}
+
+export async function getRewardClaimsByUserId(userId: string): Promise<RewardClaimType[]> {
+  return withDatabaseReadFallback('getRewardClaimsByUserId', [], async () => {
+    const docs = await RewardClaimModel.find({ user_id: userId })
+      .sort({ requested_at: -1 })
+      .limit(10)
+      .lean();
+
+    if (docs.length === 0) {
+      return [];
+    }
+
+    const reviewerIds = docs
+      .map((doc: any) => doc.reviewed_by_id)
+      .filter(Boolean);
+    const users = reviewerIds.length > 0
+      ? await UserModel.find({ _id: { $in: [userId, ...reviewerIds] } }).select('_id name').lean()
+      : await UserModel.find({ _id: userId }).select('_id name').lean();
+    const userMap = new Map(users.map((user: any) => [user._id, user]));
+
+    return docs.map((doc: any) => mapRewardClaim(doc, userMap));
+  });
+}
+
+export async function getRewardClaimById(claimId: string): Promise<RewardClaimType | undefined> {
+  return withDatabaseReadFallback('getRewardClaimById', undefined, async () => {
+    const claim = await RewardClaimModel.findOne({ _id: claimId }).lean();
+    if (!claim) {
+      return undefined;
+    }
+
+    const users = await UserModel.find({
+      _id: {
+        $in: [claim.user_id, claim.reviewed_by_id].filter(Boolean),
+      },
+    }).select('_id name').lean();
+    const userMap = new Map(users.map((user: any) => [user._id, user]));
+
+    return mapRewardClaim(claim, userMap);
+  });
+}
+
+export async function getRewardClaimsForAdmin(): Promise<RewardClaimType[]> {
+  return withDatabaseReadFallback('getRewardClaimsForAdmin', [], async () => {
+    const docs = await RewardClaimModel.find({})
+      .sort({ requested_at: -1 })
+      .limit(100)
+      .lean();
+
+    if (docs.length === 0) {
+      return [];
+    }
+
+    const userIds = new Set<string>();
+    docs.forEach((doc: any) => {
+      userIds.add(doc.user_id);
+      if (doc.reviewed_by_id) {
+        userIds.add(doc.reviewed_by_id);
+      }
+    });
+
+    const users = await UserModel.find({ _id: { $in: [...userIds] } }).select('_id name').lean();
+    const userMap = new Map(users.map((user: any) => [user._id, user]));
+
+    return docs.map((doc: any) => mapRewardClaim(doc, userMap));
+  });
+}
+
+export async function createRewardClaim(data: {
+  userId: string;
+  walletAddress: string;
+  claimUnits: number;
+  pointsRedeemed: number;
+  maticAmount: number;
+}): Promise<RewardClaimType> {
+  await ensureDatabaseWriteAccess('createRewardClaim');
+
+  const claimId = `CLAIM-${Math.floor(Math.random() * 90000) + 10000}`;
+  const claim = await RewardClaimModel.create({
+    _id: claimId,
+    user_id: data.userId,
+    wallet_address: data.walletAddress,
+    claim_units: data.claimUnits,
+    points_redeemed: data.pointsRedeemed,
+    matic_amount: data.maticAmount,
+    status: 'Pending',
+    requested_at: new Date(),
+  });
+
+  await AppNotificationModel.create({
+    user_id: data.userId,
+    title: 'Reward claim submitted',
+    message: `Your claim for ${data.maticAmount} MATIC is waiting for admin approval.`,
+    href: '/profile',
+    kind: 'reward_claim',
+  });
+
+  return mapRewardClaim(claim);
+}
+
+export async function rejectRewardClaim(claimId: string, adminId: string, note?: string): Promise<RewardClaimType | undefined> {
+  await ensureDatabaseWriteAccess('rejectRewardClaim');
+
+  const claim = await RewardClaimModel.findOne({ _id: claimId });
+  if (!claim) {
+    return undefined;
+  }
+
+  if (claim.status !== 'Pending') {
+    throw new Error('This reward claim has already been reviewed.');
+  }
+
+  claim.status = 'Rejected';
+  claim.reviewed_at = new Date();
+  claim.reviewed_by_id = adminId;
+  claim.note = note || undefined;
+  await claim.save();
+
+  await AppNotificationModel.create({
+    user_id: claim.user_id,
+    title: 'Reward claim rejected',
+    message: note
+      ? `Your reward claim was rejected: ${note}`
+      : 'Your reward claim was rejected by the admin team.',
+    href: '/profile',
+    kind: 'reward_claim',
+  });
+
+  const reviewers = await UserModel.find({ _id: { $in: [claim.user_id, adminId] } }).select('_id name').lean();
+  const userMap = new Map(reviewers.map((user: any) => [user._id, user]));
+  return mapRewardClaim(claim, userMap);
+}
+
+export async function markRewardClaimPaid(data: {
+  claimId: string;
+  adminId: string;
+  txHash: string;
+  payoutFromAddress: string;
+  note?: string;
+}): Promise<RewardClaimType | undefined> {
+  await ensureDatabaseWriteAccess('markRewardClaimPaid');
+
+  const claim = await RewardClaimModel.findOne({ _id: data.claimId });
+  if (!claim) {
+    return undefined;
+  }
+
+  if (claim.status !== 'Pending') {
+    throw new Error('This reward claim has already been reviewed.');
+  }
+
+  claim.status = 'Paid';
+  claim.reviewed_at = new Date();
+  claim.reviewed_by_id = data.adminId;
+  claim.tx_hash = data.txHash;
+  claim.payout_from_address = data.payoutFromAddress;
+  claim.note = data.note || undefined;
+  await claim.save();
+
+  await AppNotificationModel.create({
+    user_id: claim.user_id,
+    title: 'Reward claim paid',
+    message: `${claim.matic_amount} MATIC was sent to your wallet.`,
+    href: '/profile',
+    kind: 'reward_claim',
+  });
+
+  const reviewers = await UserModel.find({ _id: { $in: [claim.user_id, data.adminId] } }).select('_id name').lean();
+  const userMap = new Map(reviewers.map((user: any) => [user._id, user]));
+  return mapRewardClaim(claim, userMap);
+}
+
 export async function getLeaderboard(): Promise<{ user: User; points: number; issuesCount: number }[]> {
   return withDatabaseReadFallback('getLeaderboard', [], async () => {
     const result = await UserModel.aggregate([
@@ -659,9 +903,12 @@ export async function createSOSAlert(data: {
     throw new Error('A valid pincode is required for SOS alerts.');
   }
 
-  const mostRecentAlert = await SOSAlertModel.findOne({ sender_id: userId }).sort({ created_at: -1 }).lean();
+  const mostRecentAlert = await SOSAlertModel.findOne({
+    sender_id: userId,
+    status: { $in: ['Active', 'Accepted'] },
+  }).sort({ created_at: -1 }).lean();
   if (mostRecentAlert && Date.now() - new Date(mostRecentAlert.created_at).getTime() < SOS_COOLDOWN_MS) {
-    throw new Error('Please wait a moment before sending another SOS alert.');
+    throw new Error('Please wait 30 seconds before sending another SOS alert.');
   }
 
   let nearbyHeroes = await findNearbyLocalHeroesByPincode({
@@ -890,6 +1137,54 @@ export async function acceptSOSAlert(
     acceptedHelperLocationLat: alert.accepted_helper_location_lat || undefined,
     acceptedHelperLocationLng: alert.accepted_helper_location_lng || undefined,
   };
+}
+
+export async function resolveSOSAlert(alertId: string, adminId: string): Promise<SOSAlertType> {
+  await ensureDatabaseWriteAccess('resolveSOSAlert');
+
+  const alert = await SOSAlertModel.findOne({ _id: alertId });
+  if (!alert) {
+    throw new Error('SOS alert not found.');
+  }
+
+  if (alert.status === 'Resolved') {
+    throw new Error('This SOS alert is already resolved.');
+  }
+
+  alert.status = 'Resolved';
+  await alert.save();
+
+  const notifications = [
+    {
+      user_id: alert.sender_id,
+      title: 'SOS incident closed',
+      message: alert.accepted_by_id
+        ? 'Your SOS request was handled and marked as resolved.'
+        : 'Your SOS request was reviewed and marked as resolved.',
+      href: '/profile?sos=mine',
+      kind: 'sos_sent',
+      related_sos_id: alertId,
+    },
+  ];
+
+  if (alert.accepted_by_id) {
+    notifications.push({
+      user_id: alert.accepted_by_id,
+      title: 'SOS case closed',
+      message: 'The SOS alert you responded to has been marked as resolved.',
+      href: '/profile?sos=helpers',
+      kind: 'sos_alert',
+      related_sos_id: alertId,
+    });
+  }
+
+  await AppNotificationModel.insertMany(notifications);
+
+  const userIds = [alert.sender_id, alert.accepted_by_id, adminId].filter(Boolean);
+  const users = await UserModel.find({ _id: { $in: userIds } }).lean();
+  const userMap = new Map(users.map((user: any) => [user._id, user]));
+
+  return mapSOSAlertWithUsers(alert.toObject(), userMap);
 }
 
 export async function getSOSAlertsForAdmin(): Promise<SOSAlertType[]> {

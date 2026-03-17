@@ -14,22 +14,22 @@ const SOS_BUTTONS = [
         label: "Medical",
         value: "Medical Emergency",
         icon: HeartPulse,
-        className: "border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:border-rose-400",
-        ringClassName: "bg-rose-500/15 text-rose-600",
+        className: "!bg-none border-rose-300 !bg-rose-50 text-rose-700 hover:!bg-rose-100 hover:border-rose-400 dark:border-rose-500/60 dark:!bg-rose-950/80 dark:text-rose-100 dark:hover:border-rose-400/70 dark:hover:!bg-rose-950/95",
+        ringClassName: "bg-rose-500/15 text-rose-600 dark:bg-rose-400/20 dark:text-rose-100",
     },
     {
         label: "Safety",
         value: "Safety Emergency",
         icon: ShieldAlert,
-        className: "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 hover:border-amber-400",
-        ringClassName: "bg-amber-500/15 text-amber-600",
+        className: "!bg-none border-amber-300 !bg-amber-50 text-amber-800 hover:!bg-amber-100 hover:border-amber-400 dark:border-amber-500/60 dark:!bg-amber-950/80 dark:text-amber-100 dark:hover:border-amber-400/70 dark:hover:!bg-amber-950/95",
+        ringClassName: "bg-amber-500/15 text-amber-600 dark:bg-amber-400/20 dark:text-amber-100",
     },
     {
         label: "Other",
         value: "Other Emergency",
         icon: TriangleAlert,
-        className: "border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100 hover:border-sky-400",
-        ringClassName: "bg-sky-500/15 text-sky-600",
+        className: "!bg-none border-sky-300 !bg-sky-50 text-sky-700 hover:!bg-sky-100 hover:border-sky-400 dark:border-sky-500/60 dark:!bg-sky-950/80 dark:text-sky-100 dark:hover:border-sky-400/70 dark:hover:!bg-sky-950/95",
+        ringClassName: "bg-sky-500/15 text-sky-600 dark:bg-sky-400/20 dark:text-sky-100",
     },
 ];
 
@@ -185,9 +185,9 @@ export function SOSModal({ isLoggedIn }: { isLoggedIn?: boolean }) {
                     SOS Emergency
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-2xl">
+            <DialogContent className="sm:max-w-2xl dark:border-white/10 dark:bg-slate-950/95">
                 <DialogHeader>
-                    <DialogTitle className="text-center text-xl text-red-700">SOS</DialogTitle>
+                    <DialogTitle className="text-center text-xl text-red-700 dark:text-red-300">SOS</DialogTitle>
                 </DialogHeader>
 
                 {!isLoggedIn ? (
@@ -265,7 +265,7 @@ export function SOSModal({ isLoggedIn }: { isLoggedIn?: boolean }) {
                                     </div>
                                     <div className="flex min-h-[4.5rem] flex-col items-center justify-center space-y-1">
                                         <div className="text-2xl font-bold leading-none">{item.label}</div>
-                                        <div className="max-w-[9rem] text-center text-[0.78rem] font-medium leading-4 opacity-75">
+                                        <div className="max-w-[9rem] text-center text-[0.78rem] font-medium leading-4 opacity-80 dark:opacity-90">
                                             Tap to alert nearby helpers
                                         </div>
                                     </div>

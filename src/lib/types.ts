@@ -49,7 +49,7 @@ export type LocalityScoreResult = {
   issueCounts: LocalityIssueCount[];
 };
 
-export type NotificationKind = "issue_update" | "sos_alert" | "sos_sent";
+export type NotificationKind = "issue_update" | "sos_alert" | "sos_sent" | "reward_claim";
 
 export type AppNotification = {
   id: string;
@@ -60,6 +60,26 @@ export type AppNotification = {
   timestamp: Date;
   status?: IssueStatus;
   relatedSosId?: string;
+};
+
+export type RewardClaimStatus = "Pending" | "Paid" | "Rejected";
+
+export type RewardClaim = {
+  id: string;
+  userId: string;
+  userName?: string;
+  walletAddress: string;
+  claimUnits: number;
+  pointsRedeemed: number;
+  maticAmount: number;
+  status: RewardClaimStatus;
+  requestedAt: Date;
+  reviewedAt?: Date;
+  reviewedById?: string;
+  reviewedByName?: string;
+  txHash?: string;
+  payoutFromAddress?: string;
+  note?: string;
 };
 
 export type SOSAlert = {
@@ -114,6 +134,7 @@ export type User = {
   name: string;
   avatarUrl: string;
   imageHint: string;
+  walletAddress?: string;
   rewardPoints?: number;
   role?: 'admin' | 'user';
 };

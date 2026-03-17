@@ -1,20 +1,28 @@
 
-import { getIssuesByUserId, getSOSAlertsBySender, getSOSAlertsForHero, getUserById } from '@/server/data';
+import Link from 'next/link';
+import { getIssuesByUserId, getRewardClaimSummary, getRewardClaimsByUserId, getSOSAlertsBySender, getSOSAlertsForHero, getUserById } from '@/server/data';
 import { IssueCard } from '@/components/issues/IssueCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ProfilePhotoForm } from '@/components/profile/ProfilePhotoForm';
+import { RewardClaimControls } from '@/components/profile/RewardClaimControls';
 import { SOSDashboard } from '@/components/profile/SOSDashboard';
+import { Badge } from '@/components/ui/badge';
 import { CheckSquare, Hourglass, Award, Gift, Sparkles } from 'lucide-react';
 
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { SOS_HELP_REWARD_POINTS } from '@/lib/rewards';
 
-// const MOCKED_USER_ID = 'user-1'; // Removed
-
-const POINTS_PER_RESOLUTION = 50;
-const POINTS_TO_MATIC_RATE = 150 / 10; // 150 points = 10 MATIC
-const SOS_HELP_REWARD_POINTS = 50;
+function rewardStatusTone(status: "Pending" | "Paid" | "Rejected") {
+  if (status === "Paid") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+  if (status === "Rejected") {
+    return "border-rose-200 bg-rose-50 text-rose-700";
+  }
+  return "border-amber-200 bg-amber-50 text-amber-700";
+}
 
 export default async function ProfilePage({
   searchParams,
@@ -31,11 +39,13 @@ export default async function ProfilePage({
   const userId = sessionToken.value;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
 
-  const [user, userIssues, helperAlerts, sentAlerts] = await Promise.all([
+  const [user, userIssues, helperAlerts, sentAlerts, rewardSummary, rewardClaims] = await Promise.all([
     getUserById(userId),
     getIssuesByUserId(userId),
     getSOSAlertsForHero(userId),
     getSOSAlertsBySender(userId),
+    getRewardClaimSummary(userId),
+    getRewardClaimsByUserId(userId),
   ]);
 
   const totalIssues = userIssues.length;
@@ -43,8 +53,8 @@ export default async function ProfilePage({
   const pendingIssues = totalIssues - resolvedIssues;
   const sosRewards = user?.rewardPoints || 0;
   const sosHelpsCount = Math.floor(sosRewards / SOS_HELP_REWARD_POINTS);
-  const totalPoints = (resolvedIssues * POINTS_PER_RESOLUTION) + sosRewards;
-  const maticValue = (totalPoints / POINTS_TO_MATIC_RATE).toFixed(2);
+  const claimableMaticValue = rewardSummary.maticAmount.toFixed(2);
+  const latestRewardClaims = rewardClaims.slice(0, 3);
 
   return (
     <div className="space-y-8">
@@ -84,23 +94,74 @@ export default async function ProfilePage({
             <Award className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-primary">{totalPoints}</div>
+            <div className="text-2xl font-bold text-primary">{rewardSummary.totalPoints}</div>
             <p className="text-xs text-muted-foreground">
               From {resolvedIssues} resolved issues and {sosHelpsCount} SOS help{sosHelpsCount === 1 ? '' : 's'}
             </p>
           </CardContent>
         </Card>
-        <Card className="bg-accent/30 border-accent">
+        <Card className="border-accent bg-accent/30 md:col-span-2 lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-primary">Redeemable Value</CardTitle>
             <Gift className="h-4 w-4 text-primary" />
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <div className="text-2xl font-bold text-primary">
-              <span className="font-mono">{maticValue}</span>
+              <span className="font-mono">{claimableMaticValue}</span>
               <span className="text-lg ml-1">MATIC</span>
             </div>
-            <p className="text-xs text-muted-foreground">150 points = 10 MATIC</p>
+            <p className="text-xs text-muted-foreground">
+              {rewardSummary.claimUnits > 0
+                ? `${rewardSummary.claimablePoints} points are ready to redeem right now.`
+                : `150 points = 10 MATIC. ${rewardSummary.pointsUntilNextClaim} more point${rewardSummary.pointsUntilNextClaim === 1 ? '' : 's'} to unlock the next claim.`}
+            </p>
+
+            <RewardClaimControls
+              walletAddress={user?.walletAddress}
+              claimUnits={rewardSummary.claimUnits}
+              claimablePoints={rewardSummary.claimablePoints}
+              claimableMaticAmount={rewardSummary.maticAmount}
+              pointsUntilNextClaim={rewardSummary.pointsUntilNextClaim}
+              hasPendingClaim={rewardSummary.hasPendingClaim}
+              isAdmin={user?.role === 'admin'}
+            />
+
+            {latestRewardClaims.length > 0 ? (
+              <div className="space-y-2 rounded-2xl border border-border/70 bg-background/70 p-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Recent Claims</p>
+                <div className="space-y-2">
+                  {latestRewardClaims.map((claim) => (
+                    <div key={claim.id} className="flex flex-col gap-2 rounded-xl border border-border/60 bg-card/80 p-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">
+                          {claim.maticAmount.toFixed(2)} MATIC
+                          <span className="ml-2 text-xs text-muted-foreground">{claim.pointsRedeemed} points</span>
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Requested {new Date(claim.requestedAt).toLocaleDateString()}
+                        </p>
+                        {claim.note ? (
+                          <p className="mt-1 text-xs text-muted-foreground">{claim.note}</p>
+                        ) : null}
+                        {claim.txHash ? (
+                          <Link
+                            href={`https://www.oklink.com/amoy/tx/${claim.txHash}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-1 inline-block text-xs font-medium text-primary hover:underline"
+                          >
+                            View payout transaction
+                          </Link>
+                        ) : null}
+                      </div>
+                      <Badge variant="outline" className={rewardStatusTone(claim.status)}>
+                        {claim.status}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
         <Card>

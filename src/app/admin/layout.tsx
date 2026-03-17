@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
 import Link from 'next/link';
-import { LayoutDashboard, LogOut, Siren, User } from "lucide-react";
+import { Gift, LayoutDashboard, LogOut, Siren, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { adminLogoutAction } from "@/server/actions";
 import { connectWallet, isWalletConnected } from "@/lib/web3";
@@ -110,6 +110,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 >
                   <Siren className="h-3.5 w-3.5" />
                   SOS Tracking
+                </Link>
+                <Link
+                  href="/admin/rewards"
+                  className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-sm transition-colors ${
+                    pathname === "/admin/rewards"
+                      ? "bg-emerald-600 text-white"
+                      : "text-muted-foreground hover:bg-emerald-50 hover:text-emerald-700"
+                  }`}
+                >
+                  <Gift className="h-3.5 w-3.5" />
+                  Rewards
                 </Link>
               </nav>
             </div>

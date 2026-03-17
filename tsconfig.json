@@ -36,6 +36,7 @@
     ".next/dev/types/**/*.ts"
 , "src/components/ui/ui_CivicLens.jsx"  ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "mobile"
   ]
 }
